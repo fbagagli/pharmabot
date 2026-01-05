@@ -1,9 +1,11 @@
 import typer
 from rich import print
+from rich.table import Table
 from typing import Optional
 from typing_extensions import Annotated
 from pharmabot.database import create_db_and_tables, get_session
 from pharmabot.models import Product
+from sqlmodel import select
 
 app = typer.Typer()
 
@@ -57,6 +59,29 @@ def add_product(
             print(
                 f"[green]Added product: {new_product.name} (Minsan: {new_product.minsan}, Quantity: {new_product.quantity})[/green]"
             )
+
+
+@app.command()
+def list_products():
+    """
+    List all products in the basket.
+    """
+    with get_session() as session:
+        products = session.exec(select(Product)).all()
+
+        if not products:
+            print("No items are present")
+            raise typer.Exit()
+
+        table = Table(title="Products in Basket")
+        table.add_column("Minsan", justify="left", style="cyan", no_wrap=True)
+        table.add_column("Name", style="magenta")
+        table.add_column("Quantity", justify="right", style="green")
+
+        for product in products:
+            table.add_row(product.minsan, product.name, str(product.quantity))
+
+        print(table)
 
 
 if __name__ == "__main__":
