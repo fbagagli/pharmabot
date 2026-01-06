@@ -1,8 +1,11 @@
 import typer
 from rich import print
 from pharmabot.database import create_db_and_tables
+from pharmabot import catalog
 
 app = typer.Typer()
+
+app.add_typer(catalog.app, name="catalog", help="Manage product catalog.")
 
 
 @app.command()
