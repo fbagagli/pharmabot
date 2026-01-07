@@ -63,7 +63,12 @@ def test_basket_service_remove(session: Session):
 
     # Test remove
     basket_service.remove_item_from_basket(session, product.id)
-    assert session.exec(select(BasketItem).where(BasketItem.product_id == product.id)).first() is None
+    assert (
+        session.exec(
+            select(BasketItem).where(BasketItem.product_id == product.id)
+        ).first()
+        is None
+    )
 
 
 def test_basket_service_remove_nonexistent_item(session: Session):
@@ -89,7 +94,9 @@ def test_cli_add(session: Session):
     assert "added to basket" in result.stdout
 
     # Verify in DB
-    item = session.exec(select(BasketItem).where(BasketItem.product_id == product.id)).first()
+    item = session.exec(
+        select(BasketItem).where(BasketItem.product_id == product.id)
+    ).first()
     assert item is not None
     assert item.quantity == 5
 
@@ -109,12 +116,16 @@ def test_cli_update(session: Session):
     basket_service.add_item_to_basket(session, product.id, 1)
 
     # Test update command
-    result = runner.invoke(app, ["basket", "update", str(product.id), "--quantity", "20"])
+    result = runner.invoke(
+        app, ["basket", "update", str(product.id), "--quantity", "20"]
+    )
     assert result.exit_code == 0
     assert "quantity updated to 20" in result.stdout
 
     # Verify in DB
-    item = session.exec(select(BasketItem).where(BasketItem.product_id == product.id)).first()
+    item = session.exec(
+        select(BasketItem).where(BasketItem.product_id == product.id)
+    ).first()
     assert item.quantity == 20
 
 
@@ -132,7 +143,9 @@ def test_cli_remove(session: Session):
     assert "removed from basket" in result.stdout
 
     # Verify in DB
-    item = session.exec(select(BasketItem).where(BasketItem.product_id == product.id)).first()
+    item = session.exec(
+        select(BasketItem).where(BasketItem.product_id == product.id)
+    ).first()
     assert item is None
 
 
@@ -165,6 +178,7 @@ def test_cli_list_empty(session: Session):
     assert result.exit_code == 0
     assert "No items in basket" in result.stdout
 
+
 def test_basket_service_add_negative_quantity(session: Session):
     product = ProductCatalog(minsan="123456789", name="Test Product")
     session.add(product)
@@ -172,6 +186,7 @@ def test_basket_service_add_negative_quantity(session: Session):
 
     with pytest.raises(ValueError):
         basket_service.add_item_to_basket(session, product.id, -1)
+
 
 def test_basket_service_update_negative_quantity(session: Session):
     product = ProductCatalog(minsan="123456789", name="Test Product")
