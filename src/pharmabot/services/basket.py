@@ -35,7 +35,9 @@ def add_item_to_basket(session: Session, product_id: int, quantity: int) -> Bask
     return basket_item
 
 
-def update_basket_item_quantity(session: Session, product_id: int, quantity: int) -> BasketItem:
+def update_basket_item_quantity(
+    session: Session, product_id: int, quantity: int
+) -> BasketItem:
     if quantity <= 0:
         raise ValueError("Quantity must be a positive integer")
 

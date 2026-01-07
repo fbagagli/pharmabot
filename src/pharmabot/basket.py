@@ -21,7 +21,9 @@ def add(
     with database.get_session() as session:
         try:
             basket_service.add_item_to_basket(session, product_id, quantity)
-            console.print(f"[green]Product {product_id} added to basket (quantity added: {quantity}).[/green]")
+            console.print(
+                f"[green]Product {product_id} added to basket (quantity added: {quantity}).[/green]"
+            )
         except basket_service.ProductNotFoundError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
@@ -41,7 +43,9 @@ def update(
     with database.get_session() as session:
         try:
             basket_service.update_basket_item_quantity(session, product_id, quantity)
-            console.print(f"[green]Product {product_id} quantity updated to {quantity}.[/green]")
+            console.print(
+                f"[green]Product {product_id} quantity updated to {quantity}.[/green]"
+            )
         except basket_service.ItemNotPresentError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
