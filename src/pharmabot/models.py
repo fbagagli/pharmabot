@@ -33,7 +33,7 @@ class BasketItem(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     quantity: int = Field(default=1)
 
-    product_id: int = Field(foreign_key="productcatalog.id")
+    product_id: int = Field(foreign_key="productcatalog.id", unique=True)
 
     product: ProductCatalog = Relationship(back_populates="basket_entries")
 
