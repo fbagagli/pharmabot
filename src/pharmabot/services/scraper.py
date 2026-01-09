@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.panel import Panel
 from seleniumbase import SB
+from sqlmodel import Session, select, delete
+from pharmabot.models import BasketItem, Pharmacy, Offer, ProductCatalog
 
 console = Console()
 
@@ -198,3 +200,73 @@ def scrape_product(minsan: str = "982473682", headless: bool = True):
         except Exception as e:
             console.print(f"[bold red]Error:[/bold red] {e}")
             return []
+
+
+def scrape_basket(session: Session):
+    """
+    1. Clear Offer and Pharmacy tables.
+    2. Iterate over all basket items.
+    3. Scrape offers for each product.
+    4. Populate DB with Pharmacy and Offer records.
+    """
+    console.print(Panel("Starting Basket Scraping...", style="bold magenta"))
+
+    # 1. Clear Tables
+    console.print("[yellow]Clearing existing offers and pharmacies...[/]")
+    session.exec(delete(Offer))
+    session.exec(delete(Pharmacy))
+    session.commit()
+
+    # 2. Get Basket Items
+    basket_items = session.exec(select(BasketItem)).all()
+    if not basket_items:
+        console.print("[red]Basket is empty. Nothing to scrape.[/]")
+        return
+
+    # 3. Iterate and Scrape
+    for item in basket_items:
+        # Need to fetch the product to get the minsan
+        product = session.get(ProductCatalog, item.product_id)
+        if not product:
+            console.print(f"[red]Product for basket item {item.id} not found.[/]")
+            continue
+
+        console.print(f"\n[bold cyan]Scraping product: {product.name} (Minsan: {product.minsan})[/]")
+
+        # Scrape
+        offers_data = scrape_product(minsan=product.minsan, headless=True)
+
+        if not offers_data:
+            console.print(f"[yellow]No offers found for {product.name}[/]")
+            continue
+
+        console.print(f"[green]Found {len(offers_data)} offers for {product.name}. Saving to DB...[/]")
+
+        # 4. Save to DB
+        for offer_data in offers_data:
+            pharmacy_name = offer_data["pharmacy"]
+
+            # Check if Pharmacy exists
+            # We check by name
+            pharmacy = session.exec(select(Pharmacy).where(Pharmacy.name == pharmacy_name)).first()
+            if not pharmacy:
+                pharmacy = Pharmacy(
+                    name=pharmacy_name,
+                    base_shipping_cost=offer_data["shipping_price"],
+                    free_shipping_threshold=offer_data["free_shipping_over"]
+                )
+                session.add(pharmacy)
+                session.commit()
+                session.refresh(pharmacy)
+
+            # Create Offer
+            offer = Offer(
+                price=offer_data["price"],
+                pharmacy_id=pharmacy.id,
+                product_id=product.id
+            )
+            session.add(offer)
+
+        session.commit()
+
+    console.print(Panel("Basket Scraping Complete!", style="bold green"))

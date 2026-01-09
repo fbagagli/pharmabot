@@ -19,8 +19,8 @@ class ProductCatalog(SQLModel, table=True):
 
 
 class Pharmacy(SQLModel, table=True):
-    id: str = Field(primary_key=True)
-    name: str
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
     base_shipping_cost: Decimal = Field(default=0, max_digits=5, decimal_places=2)
     free_shipping_threshold: Optional[Decimal] = Field(
         default=None, max_digits=6, decimal_places=2
@@ -41,11 +41,9 @@ class BasketItem(SQLModel, table=True):
 class Offer(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     price: Decimal = Field(max_digits=6, decimal_places=2)
-    url: str
-    available: bool = Field(default=True)
     timestamp: datetime = Field(default_factory=datetime.now)
 
-    pharmacy_id: str = Field(foreign_key="pharmacy.id")
+    pharmacy_id: int = Field(foreign_key="pharmacy.id")
     pharmacy: Pharmacy = Relationship(back_populates="offers")
 
     product_id: int = Field(foreign_key="productcatalog.id")
