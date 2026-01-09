@@ -3,6 +3,7 @@ from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
 from pharmabot.services import scraper as scraper_service
+from pharmabot.database import get_session
 
 app = typer.Typer()
 console = Console()
@@ -42,3 +43,12 @@ def search(
         )
 
     console.print(table)
+
+
+@app.command(name="all")
+def scrape_all():
+    """
+    Scrape all products in the basket and update the database.
+    """
+    with get_session() as session:
+        scraper_service.scrape_basket(session)
