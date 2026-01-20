@@ -2,9 +2,17 @@ import re
 from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.panel import Panel
+from selenium.webdriver.common.by import By
 from seleniumbase import SB
 from sqlmodel import Session, select, delete
 from pharmabot.models import BasketItem, Pharmacy, Offer, ProductCatalog
+from pharmabot.exceptions import PharmaBotMissingCookieBanner
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 console = Console()
 
@@ -30,20 +38,24 @@ def step_1_open_site(sb):
         raise Exception("Navigation Failed")
 
 
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=2, max=5),
+    retry=retry_if_exception_type(PharmaBotMissingCookieBanner),
+    reraise=True,
+)
 def step_2_accept_cookies(sb):
     console.print(Panel("Step 2: Cookies...", style="magenta"))
-    # The robust class selector we agreed on
     cookie_btn = ".iubenda-cs-accept-btn"
     if sb.is_element_visible(cookie_btn):
         sb.click(cookie_btn)
-        sb.wait_for_element_not_visible(cookie_btn, timeout=3)
         console.print("[green]✔ Cookies Accepted[/]")
     else:
         console.print("[yellow]⚠ No cookie banner (Skipping)[/]")
+        raise PharmaBotMissingCookieBanner("no cookie banner found")
 
 
 def step_3_search(sb, minsan):
-    console.print(Panel(f"Step 3: Searching {minsan}...", style="yellow"))
     search_input = 'input[type="search"], input[name="q"]'
     sb.wait_for_element(search_input, timeout=5)
     sb.click(search_input)
@@ -51,14 +63,67 @@ def step_3_search(sb, minsan):
 
     console.print("[grey50]Waiting for results...[/]")
     try:
-        sb.wait_for_text("€", timeout=10)
+        sb.wait_for_text("€", timeout=5)
         console.print("[green]✔ Results loaded[/]")
     except Exception:
+        console.print("[yellow] Results missing, go to check for other actions[/]")
         sb.save_screenshot("search_fail.png")
-        raise Exception("Search Timeout")
 
 
-def step_3b_load_all_results(sb):
+def step_3_is_disambiguation_page(sb):
+    """
+    Returns True if the page contains the 'disambiguation no_products' div.
+
+    Args:
+        sb: The SeleniumBase sb fixture/object
+    """
+    return sb.is_element_visible("div.disambiguation.no_products")
+
+
+def click_category_with_most_offers(sb):
+    """
+    Robust function using the raw driver to avoid object wrapper conflicts.
+    """
+    print("Starting search for offers...")
+
+    driver = sb.driver
+    items = driver.find_elements(By.CSS_SELECTOR, "a.relevant_item")
+
+    print(f"Found {len(items)} relevant categories.")
+
+    max_offers = -1
+    element_to_click = None
+
+    for i, item in enumerate(items):
+        try:
+            counter_el = item.find_element(By.CSS_SELECTOR, ".counter")
+            text_value = counter_el.text.strip()
+
+            print(f"Item {i}: '{text_value}'")
+
+            match = re.search(r"(\d+)", text_value)
+            if match:
+                count = int(match.group(1))
+                if count > max_offers:
+                    max_offers = count
+                    element_to_click = item
+
+        except Exception as e:
+            print(f"Skipping item {i} due to error: {e}")
+            continue
+
+    if element_to_click:
+        print(f"Clicking category with {max_offers} offers.")
+        element_to_click.click()
+    else:
+        print("No offers found to click.")
+
+
+def step_3_disambiguate(sb):
+    click_category_with_most_offers(sb)
+
+
+def step_3_load_all_results(sb):
     """
     Responsibilities:
     1. Scroll to the bottom to trigger lazy loading.
@@ -188,12 +253,23 @@ def scrape_product(minsan: str = "982473682", headless: bool = True):
     with SB(uc=True, test=True, headless=headless, locale_code="it") as sb:
         try:
             step_1_open_site(sb)
-            sb.sleep(1)
+            sb.sleep(2)
             step_2_accept_cookies(sb)
+            console.print(Panel(f"Step 3: Searching {minsan}...", style="yellow"))
             step_3_search(sb, minsan)
-            sb.sleep(2)  # Allow DOM to settle
-            step_3b_load_all_results(sb)
-            sb.sleep(1)  # Allow DOM to settle
+            sb.sleep(2)
+            if step_3_is_disambiguation_page(sb):
+                # console.print("[yellow]Found disambiguation, try to fix...[/]")
+                # step_3_disambiguate(sb)
+                # sb.sleep(2)
+                console.print(
+                    "[yellow]Found disambiguation, select item and then press enter...[/]"
+                )
+                input("")
+            else:
+                console.print("[green]load all results and go to parsing...[/]")
+            step_3_load_all_results(sb)
+            sb.sleep(2)
             offers = step_4_extract_results(sb)
             return offers
 
@@ -202,7 +278,7 @@ def scrape_product(minsan: str = "982473682", headless: bool = True):
             return []
 
 
-def scrape_basket(session: Session):
+def scrape_basket(session: Session, headless: bool = True):
     """
     1. Clear Offer and Pharmacy tables.
     2. Iterate over all basket items.
@@ -231,16 +307,20 @@ def scrape_basket(session: Session):
             console.print(f"[red]Product for basket item {item.id} not found.[/]")
             continue
 
-        console.print(f"\n[bold cyan]Scraping product: {product.name} (Minsan: {product.minsan})[/]")
+        console.print(
+            f"\n[bold cyan]Scraping product: {product.name} (Minsan: {product.minsan})[/]"
+        )
 
         # Scrape
-        offers_data = scrape_product(minsan=product.minsan, headless=True)
+        offers_data = scrape_product(minsan=product.minsan, headless=headless)
 
         if not offers_data:
             console.print(f"[yellow]No offers found for {product.name}[/]")
             continue
 
-        console.print(f"[green]Found {len(offers_data)} offers for {product.name}. Saving to DB...[/]")
+        console.print(
+            f"[green]Found {len(offers_data)} offers for {product.name}. Saving to DB...[/]"
+        )
 
         # 4. Save to DB
         for offer_data in offers_data:
@@ -248,12 +328,14 @@ def scrape_basket(session: Session):
 
             # Check if Pharmacy exists
             # We check by name
-            pharmacy = session.exec(select(Pharmacy).where(Pharmacy.name == pharmacy_name)).first()
+            pharmacy = session.exec(
+                select(Pharmacy).where(Pharmacy.name == pharmacy_name)
+            ).first()
             if not pharmacy:
                 pharmacy = Pharmacy(
                     name=pharmacy_name,
                     base_shipping_cost=offer_data["shipping_price"],
-                    free_shipping_threshold=offer_data["free_shipping_over"]
+                    free_shipping_threshold=offer_data["free_shipping_over"],
                 )
                 session.add(pharmacy)
                 session.commit()
@@ -263,7 +345,7 @@ def scrape_basket(session: Session):
             offer = Offer(
                 price=offer_data["price"],
                 pharmacy_id=pharmacy.id,
-                product_id=product.id
+                product_id=product.id,
             )
             session.add(offer)
 

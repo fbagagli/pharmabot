@@ -93,3 +93,22 @@ def list_items():
             table.add_row(item.product.minsan, str(item.quantity), item.product.name)
 
         console.print(table)
+
+
+@app.command(name="optimize")
+def optimize_basket(limit: int = 3):
+    with database.get_session() as session:
+        winners = basket_service.optimize_basket(session, limit)
+
+        if not winners:
+            print("No single pharmacy has all the items in stock.")
+            return
+
+        print(f"Found {len(winners)} options for full basket:\n")
+
+        for i, opt in enumerate(winners, 1):
+            print(f"#{i} {opt.pharmacy.name}")
+            print(f"   Items:    € {opt.items_cost:.2f}")
+            print(f"   Shipping: € {opt.shipping_cost:.2f}")
+            print(f"   TOTAL:    € {opt.total_cost:.2f}")
+            print("-" * 30)

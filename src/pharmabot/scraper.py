@@ -46,9 +46,9 @@ def search(
 
 
 @app.command(name="all")
-def scrape_all():
+def scrape_all(headless: bool = True):
     """
     Scrape all products in the basket and update the database.
     """
     with get_session() as session:
-        scraper_service.scrape_basket(session)
+        scraper_service.scrape_basket(session, headless)

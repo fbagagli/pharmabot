@@ -1,6 +1,7 @@
 from typing import List
 from sqlmodel import Session, select
 from pharmabot.models import BasketItem, ProductCatalog
+from pharmabot.services import price_optimizer
 
 
 class ProductNotFoundError(Exception):
@@ -68,3 +69,10 @@ def remove_item_from_basket(session: Session, product_id: int) -> None:
 def list_basket_items(session: Session) -> List[BasketItem]:
     statement = select(BasketItem)
     return list(session.exec(statement).all())
+
+
+def optimize_basket(session: Session, limit: int = 3) -> List[BasketItem]:
+    basket = session.exec(select(BasketItem)).all()
+    optimizer = price_optimizer.PriceOptimizer.from_session(session, basket)
+    # Get top 3
+    return optimizer.find_best_pharmacies(limit=limit)
