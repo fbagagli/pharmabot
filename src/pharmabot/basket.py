@@ -101,14 +101,34 @@ def optimize_basket(limit: int = 3):
         winners = basket_service.optimize_basket(session, limit)
 
         if not winners:
-            print("No single pharmacy has all the items in stock.")
+            console.print("No single pharmacy has all the items in stock.")
             return
 
-        print(f"Found {len(winners)} options for full basket:\n")
+        table = Table(title="Optimization Results")
+        table.add_column("Pharmacy Name", style="green")
+        table.add_column("Items Price", justify="right")
+        table.add_column("Actual Shipping", justify="right")
+        table.add_column("Total Price", justify="right", style="bold")
+        table.add_column("Base Shipping", justify="right")
+        table.add_column("Free Shipping Threshold", justify="right")
 
-        for i, opt in enumerate(winners, 1):
-            print(f"#{i} {opt.pharmacy.name}")
-            print(f"   Items:    € {opt.items_cost:.2f}")
-            print(f"   Shipping: € {opt.shipping_cost:.2f}")
-            print(f"   TOTAL:    € {opt.total_cost:.2f}")
-            print("-" * 30)
+        for opt in winners:
+            items_cost = f"€ {opt.items_cost:.2f}"
+            actual_shipping = f"€ {opt.shipping_cost:.2f}"
+            total_cost = f"€ {opt.total_cost:.2f}"
+
+            base_shipping = f"€ {opt.pharmacy.base_shipping_cost:.2f}"
+
+            threshold = opt.pharmacy.free_shipping_threshold
+            threshold_str = f"€ {threshold:.2f}" if threshold is not None else "N/A"
+
+            table.add_row(
+                opt.pharmacy.name,
+                items_cost,
+                actual_shipping,
+                total_cost,
+                base_shipping,
+                threshold_str,
+            )
+
+        console.print(table)

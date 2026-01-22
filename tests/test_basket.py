@@ -1,8 +1,9 @@
 import pytest
+from decimal import Decimal
 from typer.testing import CliRunner
 from sqlmodel import Session, select
 from pharmabot.main import app
-from pharmabot.models import BasketItem, ProductCatalog
+from pharmabot.models import BasketItem, ProductCatalog, Pharmacy, Offer
 from pharmabot.services import basket as basket_service
 
 runner = CliRunner()
@@ -197,3 +198,36 @@ def test_basket_service_update_negative_quantity(session: Session):
 
     with pytest.raises(ValueError):
         basket_service.update_basket_item_quantity(session, product.id, 0)
+
+
+def test_cli_optimize(session: Session):
+    # Setup data
+    p1 = ProductCatalog(minsan="900000001", name="Product A")
+    session.add(p1)
+    session.commit()
+    session.refresh(p1)
+
+    basket_service.add_item_to_basket(session, p1.id, 2)
+
+    ph1 = Pharmacy(
+        name="Pharma One",
+        base_shipping_cost=Decimal("10.00"),
+        free_shipping_threshold=Decimal("100.00"),
+    )
+    session.add(ph1)
+    session.commit()
+    session.refresh(ph1)
+
+    o1 = Offer(price=Decimal("10.00"), pharmacy_id=ph1.id, product_id=p1.id)
+    session.add(o1)
+    session.commit()
+
+    # Test optimize command
+    result = runner.invoke(app, ["basket", "optimize"])
+    assert result.exit_code == 0
+    assert "Optimization Results" in result.stdout
+    assert "Pharma One" in result.stdout
+    assert "€ 20.00" in result.stdout  # Items 2*10
+    assert "€ 10.00" in result.stdout  # Shipping
+    assert "€ 30.00" in result.stdout  # Total
+    assert "€ 100.00" in result.stdout  # Threshold
