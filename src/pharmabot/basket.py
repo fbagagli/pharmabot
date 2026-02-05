@@ -90,7 +90,8 @@ def list_items():
         for item in items:
             # BasketItem has a relationship to ProductCatalog named 'product'
             # We assume it is eagerly loaded or lazily loaded. Since we are in a session context, lazy load should work.
-            table.add_row(item.product.minsan, str(item.quantity), item.product.name)
+            minsan_str = item.product.minsan if item.product.minsan else "N/A"
+            table.add_row(minsan_str, str(item.quantity), item.product.name)
 
         console.print(table)
 
