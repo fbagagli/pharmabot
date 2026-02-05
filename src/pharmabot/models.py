@@ -7,8 +7,8 @@ from sqlmodel import SQLModel, Field, Relationship
 class ProductCatalog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
 
-    minsan: str = Field(index=True, unique=True)
-    name: str
+    minsan: Optional[str] = Field(default=None, index=True, unique=True)
+    name: str = Field(unique=True)
 
     basket_entries: List["BasketItem"] = Relationship(back_populates="product")
     offers: List["Offer"] = Relationship(back_populates="product")

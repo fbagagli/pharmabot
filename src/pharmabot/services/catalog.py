@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from sqlmodel import Session, select
 from pharmabot.models import ProductCatalog, BasketItem
 
@@ -11,11 +11,23 @@ class ProductNotFoundError(Exception):
     pass
 
 
-def add_product(session: Session, minsan: str, name: str) -> ProductCatalog:
-    statement = select(ProductCatalog).where(ProductCatalog.minsan == minsan)
-    existing_product = session.exec(statement).first()
-    if existing_product:
-        raise ProductAlreadyExistsError(f"Product with minsan {minsan} already exists")
+def add_product(
+    session: Session, name: str, minsan: Optional[str] = None
+) -> ProductCatalog:
+    # Check for name uniqueness
+    existing_name = session.exec(
+        select(ProductCatalog).where(ProductCatalog.name == name)
+    ).first()
+    if existing_name:
+        raise ProductAlreadyExistsError(f"Product with name '{name}' already exists")
+
+    if minsan is not None:
+        statement = select(ProductCatalog).where(ProductCatalog.minsan == minsan)
+        existing_product = session.exec(statement).first()
+        if existing_product:
+            raise ProductAlreadyExistsError(
+                f"Product with minsan {minsan} already exists"
+            )
 
     product = ProductCatalog(minsan=minsan, name=name)
     session.add(product)
@@ -24,11 +36,10 @@ def add_product(session: Session, minsan: str, name: str) -> ProductCatalog:
     return product
 
 
-def remove_product(session: Session, minsan: str) -> None:
-    statement = select(ProductCatalog).where(ProductCatalog.minsan == minsan)
-    product = session.exec(statement).first()
+def remove_product(session: Session, product_id: int) -> None:
+    product = session.get(ProductCatalog, product_id)
     if not product:
-        raise ProductNotFoundError(f"Product with minsan {minsan} not found")
+        raise ProductNotFoundError(f"Product with id {product_id} not found")
 
     # Cascade delete BasketItems
     # Since we don't have ON DELETE CASCADE in DB, we do it manually.
@@ -53,11 +64,10 @@ def list_products(session: Session) -> List[ProductCatalog]:
     return list(session.exec(statement).all())
 
 
-def update_product(session: Session, minsan: str, name: str) -> ProductCatalog:
-    statement = select(ProductCatalog).where(ProductCatalog.minsan == minsan)
-    product = session.exec(statement).first()
+def update_product(session: Session, product_id: int, name: str) -> ProductCatalog:
+    product = session.get(ProductCatalog, product_id)
     if not product:
-        raise ProductNotFoundError(f"Product with minsan {minsan} not found")
+        raise ProductNotFoundError(f"Product with id {product_id} not found")
 
     product.name = name
     session.add(product)
