@@ -225,9 +225,51 @@ def test_cli_optimize(session: Session):
     # Test optimize command
     result = runner.invoke(app, ["basket", "optimize"])
     assert result.exit_code == 0
-    assert "Optimization Results" in result.stdout
+    # Updated Output Checks
+    assert "Solutions with 1 Order" in result.stdout
     assert "Pharma One" in result.stdout
     assert "€ 20.00" in result.stdout  # Items 2*10
     assert "€ 10.00" in result.stdout  # Shipping
     assert "€ 30.00" in result.stdout  # Total
-    assert "€ 100.00" in result.stdout  # Threshold
+    assert "Base: €10.00" in result.stdout
+    # Check for free shipping info separately in case of line wrapping
+    assert "€100.00" in result.stdout
+
+def test_cli_optimize_multi(session: Session):
+    # P1: A ($20), B ($20) + Ship $5 = $45
+    # P2: A ($5) + Ship $0 (Free > 4) = $5
+    # P3: B ($5) + Ship $0 (Free > 4) = $5
+    # P2+P3 = $10.
+
+    p1 = Pharmacy(name="P1", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("100"))
+    p2 = Pharmacy(name="P2", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4"))
+    p3 = Pharmacy(name="P3", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4"))
+    session.add(p1)
+    session.add(p2)
+    session.add(p3)
+
+    prodA = ProductCatalog(name="ItemA")
+    prodB = ProductCatalog(name="ItemB")
+    session.add(prodA)
+    session.add(prodB)
+    session.commit()
+
+    session.add(Offer(pharmacy_id=p1.id, product_id=prodA.id, price=Decimal("20")))
+    session.add(Offer(pharmacy_id=p1.id, product_id=prodB.id, price=Decimal("20")))
+    session.add(Offer(pharmacy_id=p2.id, product_id=prodA.id, price=Decimal("5")))
+    session.add(Offer(pharmacy_id=p3.id, product_id=prodB.id, price=Decimal("5")))
+
+    session.add(BasketItem(product_id=prodA.id, quantity=1))
+    session.add(BasketItem(product_id=prodB.id, quantity=1))
+    session.commit()
+
+    # Test with max-orders=2
+    result = runner.invoke(app, ["basket", "optimize", "--max-orders", "2"])
+
+    assert result.exit_code == 0
+    assert "Solutions with 2 Orders" in result.stdout
+    # Should find 10.00
+    assert "€ 10.00" in result.stdout
+    # Should list P2 and P3
+    assert "P2" in result.stdout
+    assert "P3" in result.stdout

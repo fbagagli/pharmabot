@@ -97,39 +97,92 @@ def list_items():
 
 
 @app.command(name="optimize")
-def optimize_basket(limit: int = 3):
+def optimize_basket(
+    limit: Annotated[str, typer.Option(help="Limit results per order count (e.g. '3' or '5,2,1')")] = "3",
+    max_orders: Annotated[int, typer.Option(help="Maximum number of pharmacies to use")] = 1,
+):
+    """
+    Optimize basket by finding the best combination of pharmacies to minimize total cost.
+    """
     with database.get_session() as session:
-        winners = basket_service.optimize_basket(session, limit)
-
-        if not winners:
-            console.print("No single pharmacy has all the items in stock.")
+        # Pre-fetch product names for display
+        basket_items = basket_service.list_basket_items(session)
+        if not basket_items:
+            console.print("Basket is empty.")
             return
 
-        table = Table(title="Optimization Results")
-        table.add_column("Pharmacy Name", style="green")
-        table.add_column("Items Price", justify="right")
-        table.add_column("Actual Shipping", justify="right")
-        table.add_column("Total Price", justify="right", style="bold")
-        table.add_column("Base Shipping", justify="right")
-        table.add_column("Free Shipping Threshold", justify="right")
+        product_names = {item.product_id: item.product.name for item in basket_items}
 
-        for opt in winners:
-            items_cost = f"€ {opt.items_cost:.2f}"
-            actual_shipping = f"€ {opt.shipping_cost:.2f}"
-            total_cost = f"€ {opt.total_cost:.2f}"
+        with console.status("Optimizing basket...", spinner="dots"):
+             winners = basket_service.optimize_basket(session, limit=limit, max_orders=max_orders)
 
-            base_shipping = f"€ {opt.pharmacy.base_shipping_cost:.2f}"
+        if not winners:
+            console.print("No solutions found that cover all items.")
+            return
 
-            threshold = opt.pharmacy.free_shipping_threshold
-            threshold_str = f"€ {threshold:.2f}" if threshold is not None else "N/A"
+        # Group by order count
+        grouped = {}
+        for sol in winners:
+            k = sol.order_count
+            if k not in grouped:
+                grouped[k] = []
+            grouped[k].append(sol)
 
-            table.add_row(
-                opt.pharmacy.name,
-                items_cost,
-                actual_shipping,
-                total_cost,
-                base_shipping,
-                threshold_str,
-            )
+        for k in sorted(grouped.keys()):
+            console.print(f"\n[bold cyan]Solutions with {k} Order{'s' if k > 1 else ''}[/bold cyan]")
+            solutions = grouped[k]
 
-        console.print(table)
+            if k == 1:
+                table = Table(show_header=True, header_style="bold magenta")
+                table.add_column("Pharmacy", style="green")
+                table.add_column("Items Price", justify="right")
+                table.add_column("Shipping", justify="right")
+                table.add_column("Total Price", justify="right", style="bold")
+                table.add_column("Details", style="dim")
+
+                for sol in solutions:
+                    order = sol.orders[0]
+                    items_cost = f"€ {order.items_cost:.2f}"
+                    actual_shipping = f"€ {order.shipping_cost:.2f}"
+                    total_cost = f"€ {sol.total_cost:.2f}"
+
+                    threshold = order.pharmacy.free_shipping_threshold
+                    t_str = f"Free > €{threshold:.2f}" if threshold is not None else "No free ship"
+                    base_s = f"Base: €{order.pharmacy.base_shipping_cost:.2f}"
+                    details = f"{base_s}, {t_str}"
+
+                    table.add_row(
+                        order.pharmacy.name,
+                        items_cost,
+                        actual_shipping,
+                        total_cost,
+                        details
+                    )
+                console.print(table)
+            else:
+                for idx, sol in enumerate(solutions, 1):
+                    console.print(f"\n[bold]Option {idx} (Total: € {sol.total_cost:.2f})[/bold]")
+                    t = Table(show_header=True, header_style="yellow")
+                    t.add_column("Pharmacy", style="green")
+                    t.add_column("Items", style="white")
+                    t.add_column("Subtotal", justify="right")
+                    t.add_column("Shipping", justify="right")
+                    t.add_column("Total", justify="right")
+
+                    for order in sol.orders:
+                        # Build item list string
+                        item_list = []
+                        for m in order.items:
+                            p_name = product_names.get(m.product_id, f"ID:{m.product_id}")
+                            item_list.append(f"{p_name} (x{m.quantity_needed})")
+
+                        items_str = "\n".join(item_list)
+
+                        t.add_row(
+                            order.pharmacy.name,
+                            items_str,
+                            f"€ {order.items_cost:.2f}",
+                            f"€ {order.shipping_cost:.2f}",
+                            f"€ {order.total_cost:.2f}"
+                        )
+                    console.print(t)
