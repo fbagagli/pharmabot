@@ -90,3 +90,43 @@ def list_offers(
             )
 
         console.print(table)
+
+
+@app.command(name="list-pharmacies")
+def list_pharmacies(
+    name: Annotated[
+        Optional[str], typer.Option(help="Filter by pharmacy name (case-insensitive)")
+    ] = None,
+):
+    """
+    List all pharmacies and their shipping policies.
+    """
+    with database.get_session() as session:
+        pharmacies = scraper_service.list_pharmacies(session, name_filter=name)
+
+        if not pharmacies:
+            console.print("[yellow]No pharmacies found.[/yellow]")
+            return
+
+        table = Table(title="Pharmacy List")
+        table.add_column("ID", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Pharmacy Name", style="green")
+        table.add_column("Base Shipping", justify="right", style="blue")
+        table.add_column("Free Shipping Threshold", justify="right", style="yellow")
+
+        for pharmacy in pharmacies:
+            base_shipping = f"{pharmacy.base_shipping_cost:.2f} €"
+            free_shipping = (
+                f"{pharmacy.free_shipping_threshold:.2f} €"
+                if pharmacy.free_shipping_threshold is not None
+                else "N/A"
+            )
+
+            table.add_row(
+                str(pharmacy.id),
+                pharmacy.name,
+                base_shipping,
+                free_shipping,
+            )
+
+        console.print(table)
