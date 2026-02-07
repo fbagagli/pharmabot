@@ -55,11 +55,11 @@ def step_2_accept_cookies(sb):
         raise PharmaBotMissingCookieBanner("no cookie banner found")
 
 
-def step_3_search(sb, minsan):
+def step_3_search(sb, query):
     search_input = 'input[type="search"], input[name="q"]'
     sb.wait_for_element(search_input, timeout=5)
     sb.click(search_input)
-    sb.type(search_input, minsan + "\n")
+    sb.type(search_input, query + "\n")
 
     console.print("[grey50]Waiting for results...[/]")
     try:
@@ -248,15 +248,15 @@ def step_4_extract_results(sb):
     return results
 
 
-def scrape_product(minsan: str = "982473682", headless: bool = True):
+def scrape_product(query: str = "012745168", headless: bool = True):
     """Execute all steps to gather prices information for a single product."""
     with SB(uc=True, test=True, headless=headless, locale_code="it") as sb:
         try:
             step_1_open_site(sb)
             sb.sleep(2)
             step_2_accept_cookies(sb)
-            console.print(Panel(f"Step 3: Searching {minsan}...", style="yellow"))
-            step_3_search(sb, minsan)
+            console.print(Panel(f"Step 3: Searching {query}...", style="yellow"))
+            step_3_search(sb, query)
             sb.sleep(2)
             if step_3_is_disambiguation_page(sb):
                 # console.print("[yellow]Found disambiguation, try to fix...[/]")
@@ -307,12 +307,14 @@ def scrape_basket(session: Session, headless: bool = True):
             console.print(f"[red]Product for basket item {item.id} not found.[/]")
             continue
 
+        search_query = product.minsan if product.minsan else product.name
+
         console.print(
-            f"\n[bold cyan]Scraping product: {product.name} (Minsan: {product.minsan})[/]"
+            f"\n[bold cyan]Scraping product: {product.name} (Query: {search_query})[/]"
         )
 
         # Scrape
-        offers_data = scrape_product(minsan=product.minsan, headless=headless)
+        offers_data = scrape_product(query=search_query, headless=headless)
 
         if not offers_data:
             console.print(f"[yellow]No offers found for {product.name}[/]")

@@ -11,19 +11,19 @@ console = Console()
 
 @app.command()
 def search(
-    minsan: Annotated[str, typer.Argument(help="Minsan code to search for")],
+    query: Annotated[str, typer.Argument(help="Minsan code or Product Name")],
     headless: Annotated[bool, typer.Option(help="Run in headless mode")] = False,
 ):
     """
-    Search for a product by Minsan code.
+    Search for a product by Minsan code or Product Name.
     """
-    offers = scraper_service.scrape_product(minsan, headless=headless)
+    offers = scraper_service.scrape_product(query, headless=headless)
 
     if not offers:
         console.print("[yellow]No offers found.[/yellow]")
         return
 
-    table = Table(title=f"Offers for {minsan}")
+    table = Table(title=f"Offers for {query}")
     table.add_column("#", justify="right", style="cyan")
     table.add_column("Pharmacy", style="magenta")
     table.add_column("Price", justify="right", style="green")
