@@ -383,3 +383,17 @@ def list_offers(
 
     results = session.exec(statement).all()
     return results
+
+
+def list_pharmacies(
+    session: Session, name_filter: Optional[str] = None
+) -> Sequence[Pharmacy]:
+    """
+    List all pharmacies from the database with optional name filtering (case-insensitive).
+    """
+    statement = select(Pharmacy)
+    if name_filter:
+        statement = statement.where(Pharmacy.name.ilike(f"%{name_filter}%"))
+    statement = statement.order_by(Pharmacy.name)
+    results = session.exec(statement).all()
+    return results
