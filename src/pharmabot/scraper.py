@@ -1,9 +1,10 @@
 import typer
+from typing import Optional
 from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
 from pharmabot.services import scraper as scraper_service
-from pharmabot.database import get_session
+from pharmabot import database
 
 app = typer.Typer()
 console = Console()
@@ -50,5 +51,42 @@ def scrape_all(headless: bool = True):
     """
     Scrape all products in the basket and update the database.
     """
-    with get_session() as session:
+    with database.get_session() as session:
         scraper_service.scrape_basket(session, headless)
+
+
+@app.command(name="list-offers")
+def list_offers(
+    product_id: Annotated[
+        Optional[int], typer.Option(help="Filter by Product ID")
+    ] = None,
+    pharmacy_id: Annotated[
+        Optional[int], typer.Option(help="Filter by Pharmacy ID")
+    ] = None,
+):
+    """
+    List stored offers with optional filtering.
+    """
+    with database.get_session() as session:
+        offers = scraper_service.list_offers(session, product_id, pharmacy_id)
+
+        if not offers:
+            console.print("[yellow]No offers found.[/yellow]")
+            return
+
+        table = Table(title="Stored Offers")
+        table.add_column("Product", style="cyan")
+        table.add_column("Pharmacy", style="magenta")
+        table.add_column("Price", justify="right", style="green")
+        table.add_column("Shipping", justify="right", style="blue")
+
+        for offer in offers:
+            shipping_cost = f"{offer.pharmacy.base_shipping_cost:.2f} €"
+            table.add_row(
+                offer.product.name,
+                offer.pharmacy.name,
+                f"{offer.price:.2f} €",
+                shipping_cost,
+            )
+
+        console.print(table)
