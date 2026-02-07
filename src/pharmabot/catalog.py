@@ -2,6 +2,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 from typing_extensions import Annotated
+from typing import Optional
 
 from pharmabot import database
 from pharmabot.services import catalog as catalog_service
@@ -12,30 +13,36 @@ console = Console()
 
 @app.command()
 def add(
-    minsan: str,
     name: Annotated[str, typer.Option("--name", help="Name of the product")],
+    minsan: Annotated[
+        Optional[str], typer.Option("--minsan", help="Minsan code of the product")
+    ] = None,
 ):
     """
     Add a new product to the catalog.
     """
     with database.get_session() as session:
         try:
-            catalog_service.add_product(session, minsan, name)
-            console.print(f"[green]Product {minsan} added successfully.[/green]")
+            product = catalog_service.add_product(session, name, minsan)
+            console.print(
+                f"[green]Product '{name}' added successfully (ID: {product.id}).[/green]"
+            )
         except catalog_service.ProductAlreadyExistsError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
 
 
 @app.command()
-def remove(minsan: str):
+def remove(
+    product_id: Annotated[int, typer.Argument(help="ID of the product to remove")],
+):
     """
     Remove a product from the catalog.
     """
     with database.get_session() as session:
         try:
-            catalog_service.remove_product(session, minsan)
-            console.print(f"[green]Product {minsan} removed successfully.[/green]")
+            catalog_service.remove_product(session, product_id)
+            console.print(f"[green]Product {product_id} removed successfully.[/green]")
         except catalog_service.ProductNotFoundError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
@@ -59,14 +66,15 @@ def list_products():
             return
 
         for product in products:
-            table.add_row(str(product.id), product.minsan, product.name)
+            minsan_str = product.minsan if product.minsan else "N/A"
+            table.add_row(str(product.id), minsan_str, product.name)
 
         console.print(table)
 
 
 @app.command()
 def update(
-    minsan: str,
+    product_id: Annotated[int, typer.Argument(help="ID of the product to update")],
     name: Annotated[str, typer.Option("--name", help="New name of the product")],
 ):
     """
@@ -74,8 +82,8 @@ def update(
     """
     with database.get_session() as session:
         try:
-            catalog_service.update_product(session, minsan, name)
-            console.print(f"[green]Product {minsan} updated successfully.[/green]")
+            catalog_service.update_product(session, product_id, name)
+            console.print(f"[green]Product {product_id} updated successfully.[/green]")
         except catalog_service.ProductNotFoundError as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(code=1)
