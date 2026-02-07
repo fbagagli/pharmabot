@@ -71,8 +71,42 @@ def list_basket_items(session: Session) -> List[BasketItem]:
     return list(session.exec(statement).all())
 
 
-def optimize_basket(session: Session, limit: int = 3) -> List[BasketItem]:
+def optimize_basket(
+    session: Session, limit: str = "3", max_orders: int = 1
+) -> List[price_optimizer.Solution]:
     basket = session.exec(select(BasketItem)).all()
     optimizer = price_optimizer.PriceOptimizer.from_session(session, basket)
-    # Get top 3
-    return optimizer.find_best_pharmacies(limit=limit)
+
+    # Parse limits
+    limits_dict = {}
+    parts = [p.strip() for p in limit.split(",") if p.strip()]
+
+    if not parts:
+        # Default behavior if empty string
+        for k in range(1, max_orders + 1):
+            limits_dict[k] = 3
+    elif len(parts) == 1:
+        # Apply single value to all
+        try:
+            val = int(parts[0])
+            for k in range(1, max_orders + 1):
+                limits_dict[k] = val
+        except ValueError:
+             # Fallback
+             for k in range(1, max_orders + 1):
+                limits_dict[k] = 3
+    else:
+        # Apply specific values per order count
+        for k in range(1, max_orders + 1):
+            idx = k - 1
+            if idx < len(parts):
+                try:
+                    limits_dict[k] = int(parts[idx])
+                except ValueError:
+                    limits_dict[k] = 0
+            else:
+                # If not specified, default to 0 (don't show) or 1?
+                # Usually if I say "limit 5,2", I don't care about k=3.
+                limits_dict[k] = 0
+
+    return optimizer.find_best_solutions(max_orders=max_orders, limits=limits_dict)
