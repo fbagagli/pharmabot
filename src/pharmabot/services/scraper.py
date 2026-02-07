@@ -1,9 +1,11 @@
 import re
+from typing import Optional, Sequence
 from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.panel import Panel
 from selenium.webdriver.common.by import By
 from seleniumbase import SB
+from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select, delete
 from pharmabot.models import BasketItem, Pharmacy, Offer, ProductCatalog
 from pharmabot.exceptions import PharmaBotMissingCookieBanner
@@ -354,3 +356,30 @@ def scrape_basket(session: Session, headless: bool = True):
         session.commit()
 
     console.print(Panel("Basket Scraping Complete!", style="bold green"))
+
+
+def list_offers(
+    session: Session,
+    product_id: Optional[int] = None,
+    pharmacy_id: Optional[int] = None,
+) -> Sequence[Offer]:
+    """
+    List offers with optional filtering by product or pharmacy.
+    """
+    statement = (
+        select(Offer)
+        .join(ProductCatalog)
+        .join(Pharmacy)
+        .options(joinedload(Offer.product), joinedload(Offer.pharmacy))
+    )
+
+    if product_id:
+        statement = statement.where(Offer.product_id == product_id)
+    if pharmacy_id:
+        statement = statement.where(Offer.pharmacy_id == pharmacy_id)
+
+    # Order by Product Name then Price
+    statement = statement.order_by(ProductCatalog.name, Offer.price)
+
+    results = session.exec(statement).all()
+    return results
