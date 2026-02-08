@@ -166,9 +166,11 @@ def test_cli_list(session: Session):
     # Test list command
     result = runner.invoke(app, ["basket", "list"])
     assert result.exit_code == 0
+    assert str(product1.id) in result.stdout
     assert "L1" in result.stdout
     assert "List Product 1" in result.stdout
     assert "5" in result.stdout
+    assert str(product2.id) in result.stdout
     assert "L2" in result.stdout
     assert "List Product 2" in result.stdout
     assert "3" in result.stdout

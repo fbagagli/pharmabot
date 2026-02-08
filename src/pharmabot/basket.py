@@ -79,6 +79,7 @@ def list_items():
         items = basket_service.list_basket_items(session)
 
         table = Table(title="Basket")
+        table.add_column("ID", justify="right", style="cyan", no_wrap=True)
         table.add_column("Minsan", style="magenta")
         table.add_column("Quantity", justify="right", style="cyan")
         table.add_column("Name", style="green")
@@ -91,7 +92,9 @@ def list_items():
             # BasketItem has a relationship to ProductCatalog named 'product'
             # We assume it is eagerly loaded or lazily loaded. Since we are in a session context, lazy load should work.
             minsan_str = item.product.minsan if item.product.minsan else "N/A"
-            table.add_row(minsan_str, str(item.quantity), item.product.name)
+            table.add_row(
+                str(item.product.id), minsan_str, str(item.quantity), item.product.name
+            )
 
         console.print(table)
 
