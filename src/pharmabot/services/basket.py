@@ -1,7 +1,9 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 from sqlmodel import Session, select
 from pharmabot.models import BasketItem, ProductCatalog
-from pharmabot.services import price_optimizer
+
+if TYPE_CHECKING:
+    from pharmabot.services import price_optimizer
 
 
 class ProductNotFoundError(Exception):
@@ -73,7 +75,9 @@ def list_basket_items(session: Session) -> List[BasketItem]:
 
 def optimize_basket(
     session: Session, limit: str = "3", max_orders: int = 1
-) -> List[price_optimizer.Solution]:
+) -> List["price_optimizer.Solution"]:
+    from pharmabot.services import price_optimizer
+
     basket = session.exec(select(BasketItem)).all()
     optimizer = price_optimizer.PriceOptimizer.from_session(session, basket)
 

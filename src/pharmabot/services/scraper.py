@@ -1,10 +1,7 @@
 import re
 from typing import Optional, Sequence
-from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.panel import Panel
-from selenium.webdriver.common.by import By
-from seleniumbase import SB
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select, delete
 from pharmabot.models import BasketItem, Pharmacy, Offer, ProductCatalog
@@ -86,6 +83,8 @@ def click_category_with_most_offers(sb):
     """
     Robust function using the raw driver to avoid object wrapper conflicts.
     """
+    from selenium.webdriver.common.by import By
+
     print("Starting search for offers...")
 
     driver = sb.driver
@@ -185,6 +184,8 @@ def step_3_load_all_results(sb):
 
 # --- STEP 4: EXTRACT (PYTHON) ---
 def step_4_extract_results(sb):
+    from bs4 import BeautifulSoup
+
     console.print(Panel("Step 4: Parsing (Python/BS4)...", style="green"))
 
     html = sb.get_page_source()
@@ -252,6 +253,8 @@ def step_4_extract_results(sb):
 
 def scrape_product(query: str = "012745168", headless: bool = True):
     """Execute all steps to gather prices information for a single product."""
+    from seleniumbase import SB
+
     with SB(uc=True, test=True, headless=headless, locale_code="it") as sb:
         try:
             step_1_open_site(sb)
