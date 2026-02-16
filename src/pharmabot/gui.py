@@ -20,8 +20,7 @@ def create_ui() -> None:
 
 def run_gui() -> None:
     """Start the native GUI application."""
-    create_ui()
-    ui.run(native=True, title="Pharmabot", reload=False)
+    ui.run(create_ui, native=True, title="Pharmabot", reload=False)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
