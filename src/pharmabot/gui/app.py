@@ -1,5 +1,5 @@
 from nicegui import ui
-from pharmabot.gui.pages import home, catalog, basket
+from pharmabot.gui.pages import home, catalog, basket, scraper
 
 
 def create_ui() -> None:
@@ -10,6 +10,7 @@ def create_ui() -> None:
         home_tab = ui.tab("Home", icon="home")
         catalog_tab = ui.tab("Catalog", icon="list")
         basket_tab = ui.tab("Basket", icon="shopping_cart")
+        scraper_tab = ui.tab("Scraper", icon="cloud_download")
 
     # 2. Create the panels that correspond to the tabs
     # The 'value=home_tab' parameter ensures Home is the active page on load
@@ -25,6 +26,10 @@ def create_ui() -> None:
         # Panel for the Basket page
         with ui.tab_panel(basket_tab):
             basket.render()
+
+        # Panel for the Scraper page
+        with ui.tab_panel(scraper_tab):
+            scraper.render()
 
 
 def run_gui() -> None:

@@ -251,7 +251,9 @@ def step_4_extract_results(sb):
     return results
 
 
-def scrape_product(query: str = "012745168", headless: bool = True):
+def scrape_product(
+    query: str = "012745168", headless: bool = True, wait_for_input: bool = True
+):
     """Execute all steps to gather prices information for a single product."""
     from seleniumbase import SB
 
@@ -267,10 +269,15 @@ def scrape_product(query: str = "012745168", headless: bool = True):
                 # console.print("[yellow]Found disambiguation, try to fix...[/]")
                 # step_3_disambiguate(sb)
                 # sb.sleep(2)
-                console.print(
-                    "[yellow]Found disambiguation, select item and then press enter...[/]"
-                )
-                input("")
+                if wait_for_input:
+                    console.print(
+                        "[yellow]Found disambiguation, select item and then press enter...[/]"
+                    )
+                    input("")
+                else:
+                    console.print(
+                        "[yellow]Found disambiguation, skipping user input (wait_for_input=False)...[/]"
+                    )
             else:
                 console.print("[green]load all results and go to parsing...[/]")
             step_3_load_all_results(sb)
@@ -283,7 +290,9 @@ def scrape_product(query: str = "012745168", headless: bool = True):
             return []
 
 
-def scrape_basket(session: Session, headless: bool = True):
+def scrape_basket(
+    session: Session, headless: bool = True, wait_for_input: bool = True
+):
     """
     1. Clear Offer and Pharmacy tables.
     2. Iterate over all basket items.
@@ -319,7 +328,9 @@ def scrape_basket(session: Session, headless: bool = True):
         )
 
         # Scrape
-        offers_data = scrape_product(query=search_query, headless=headless)
+        offers_data = scrape_product(
+            query=search_query, headless=headless, wait_for_input=wait_for_input
+        )
 
         if not offers_data:
             console.print(f"[yellow]No offers found for {product.name}[/]")
