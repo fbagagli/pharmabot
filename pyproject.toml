@@ -9,6 +9,9 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "beautifulsoup4>=4.14.3",
+    "nicegui>=3.7.1",
+    "pygobject>=3.48.0",
+    "pywebview>=6.1",
     "rich>=14.2.0",
     "seleniumbase>=1.33.9",
     "sqlmodel>=0.0.27",
