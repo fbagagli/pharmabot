@@ -97,7 +97,9 @@ def test_scrape_basket_no_minsan(session: Session):
         mock_scrape.assert_called_once_with(query="Generic Aspirin", headless=True)
 
     # 5. Verify DB State
-    pharmacy = session.exec(select(Pharmacy).where(Pharmacy.name == "Test Pharmacy A")).first()
+    pharmacy = session.exec(
+        select(Pharmacy).where(Pharmacy.name == "Test Pharmacy A")
+    ).first()
     assert pharmacy is not None
     assert pharmacy.base_shipping_cost == Decimal("2.00")
 

@@ -34,9 +34,7 @@ def test_add_product_without_minsan(session: Session):
 
 def test_add_duplicate_minsan(session: Session):
     # Add first time
-    runner.invoke(
-        app, ["catalog", "add", "--name", "Product A", "--minsan", "123456"]
-    )
+    runner.invoke(app, ["catalog", "add", "--name", "Product A", "--minsan", "123456"])
 
     # Add duplicate minsan
     result = runner.invoke(
@@ -67,9 +65,7 @@ def test_list_products_empty(session: Session):
 
 
 def test_list_products_populated(session: Session):
-    runner.invoke(
-        app, ["catalog", "add", "--name", "Product A", "--minsan", "123456"]
-    )
+    runner.invoke(app, ["catalog", "add", "--name", "Product A", "--minsan", "123456"])
     runner.invoke(app, ["catalog", "add", "--name", "Product B"])
 
     result = runner.invoke(app, ["catalog", "list"])
@@ -81,9 +77,7 @@ def test_list_products_populated(session: Session):
 
 
 def test_update_product(session: Session):
-    runner.invoke(
-        app, ["catalog", "add", "--name", "Old Name", "--minsan", "123456"]
-    )
+    runner.invoke(app, ["catalog", "add", "--name", "Old Name", "--minsan", "123456"])
     product = session.exec(
         select(ProductCatalog).where(ProductCatalog.minsan == "123456")
     ).first()
@@ -105,9 +99,7 @@ def test_update_non_existent_product(session: Session):
 
 
 def test_remove_product(session: Session):
-    runner.invoke(
-        app, ["catalog", "add", "--name", "To Remove", "--minsan", "123456"]
-    )
+    runner.invoke(app, ["catalog", "add", "--name", "To Remove", "--minsan", "123456"])
     product = session.exec(
         select(ProductCatalog).where(ProductCatalog.minsan == "123456")
     ).first()

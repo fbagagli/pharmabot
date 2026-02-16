@@ -237,15 +237,24 @@ def test_cli_optimize(session: Session):
     # Check for free shipping info separately in case of line wrapping
     assert "€100.00" in result.stdout
 
+
 def test_cli_optimize_multi(session: Session):
     # P1: A ($20), B ($20) + Ship $5 = $45
     # P2: A ($5) + Ship $0 (Free > 4) = $5
     # P3: B ($5) + Ship $0 (Free > 4) = $5
     # P2+P3 = $10.
 
-    p1 = Pharmacy(name="P1", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("100"))
-    p2 = Pharmacy(name="P2", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4"))
-    p3 = Pharmacy(name="P3", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4"))
+    p1 = Pharmacy(
+        name="P1",
+        base_shipping_cost=Decimal("5"),
+        free_shipping_threshold=Decimal("100"),
+    )
+    p2 = Pharmacy(
+        name="P2", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4")
+    )
+    p3 = Pharmacy(
+        name="P3", base_shipping_cost=Decimal("5"), free_shipping_threshold=Decimal("4")
+    )
     session.add(p1)
     session.add(p2)
     session.add(p3)

@@ -7,6 +7,7 @@ from pharmabot.services.scraper import list_offers
 
 runner = CliRunner()
 
+
 @pytest.fixture(name="populated_db")
 def fixture_populated_db(session: Session):
     # Products
@@ -40,6 +41,7 @@ def fixture_populated_db(session: Session):
     session.commit()
 
     return {"products": [p1, p2], "pharmacies": [ph1, ph2], "offers": [o1, o2, o3]}
+
 
 def test_list_offers_service(session: Session, populated_db):
     # Test all offers
@@ -83,7 +85,9 @@ def test_list_offers_cli(session: Session, populated_db):
 
     # Test CLI filtering
     p1_id = populated_db["products"][0].id
-    result_filter = runner.invoke(app, ["scraper", "list-offers", "--product-id", str(p1_id)])
+    result_filter = runner.invoke(
+        app, ["scraper", "list-offers", "--product-id", str(p1_id)]
+    )
     assert result_filter.exit_code == 0
     assert "Product A" in result_filter.stdout
     # Depending on table formatting, Product B should not be present as a row
