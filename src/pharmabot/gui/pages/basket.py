@@ -118,8 +118,15 @@ def open_delete_dialog(table: ui.table, row: dict) -> None:
     dialog.open()
 
 
+@ui.refreshable
 def render() -> None:
     """Render the Basket page."""
+    if not database.is_connected():
+        ui.label("Please connect to a database in the Home tab.").classes(
+            "text-lg text-grey-500 q-pa-md"
+        )
+        return
+
     ui.label("Basket").classes("text-h4 q-mb-md")
 
     columns = [

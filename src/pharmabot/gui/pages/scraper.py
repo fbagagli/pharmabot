@@ -20,7 +20,14 @@ class NiceGUILogWriter:
         pass
 
 
+@ui.refreshable
 def render():
+    if not database.is_connected():
+        ui.label("Please connect to a database in the Home tab.").classes(
+            "text-lg text-grey-500 q-pa-md"
+        )
+        return
+
     # Container for the content
     content = ui.column().classes("w-full h-full")
 

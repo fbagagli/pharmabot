@@ -91,8 +91,15 @@ def open_delete_dialog(table: ui.table, row: dict) -> None:
     dialog.open()
 
 
+@ui.refreshable
 def render() -> None:
     """Render the Catalog page."""
+    if not database.is_connected():
+        ui.label("Please connect to a database in the Home tab.").classes(
+            "text-lg text-grey-500 q-pa-md"
+        )
+        return
+
     ui.label("Product Catalog").classes("text-h4 q-mb-md")
 
     # Add Button
