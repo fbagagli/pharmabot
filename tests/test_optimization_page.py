@@ -100,10 +100,8 @@ class TestOptimizationPage(unittest.IsolatedAsyncioTestCase):
         mock_database.get_session.assert_called()
         mock_basket_service.optimize_basket.assert_called_with(mock_session, limit="3", max_orders=2)
 
-    @patch("tkinter.Tk")
-    @patch("tkinter.filedialog.asksaveasfilename")
-    def test_save_results(self, mock_asksaveas, mock_tk):
-        """Test saving results to file."""
+    def test_save_results(self):
+        """Test saving results to file (download)."""
         # Setup data
         pharmacy = Pharmacy(name="TestPharm", base_shipping_cost=5.0)
         match = InventoryMatch(product_id=1, price=10.0, quantity_needed=2, subtotal=20.0)
@@ -116,21 +114,16 @@ class TestOptimizationPage(unittest.IsolatedAsyncioTestCase):
         )
         sol = Solution(orders=[order], total_cost=25.0)
 
-        # Mock file dialog
-        mock_asksaveas.return_value = "/tmp/test_results.txt"
+        optimization.save_results([sol])
 
-        # Mock open
-        with patch("builtins.open", mock_open()) as mock_file:
-            optimization.save_results([sol])
+        mock_ui.download.assert_called()
+        args, _ = mock_ui.download.call_args
+        content_bytes = args[0]
+        filename = args[1]
 
-            mock_asksaveas.assert_called()
-            mock_file.assert_called_with("/tmp/test_results.txt", "w", encoding="utf-8")
-
-            # Check written content
-            handle = mock_file()
-            written = handle.write.call_args[0][0]
-            self.assertIn("TestPharm", written)
-            self.assertIn("Total: € 25.00", written)
+        self.assertEqual(filename, "optimization_results.txt")
+        self.assertIn(b"TestPharm", content_bytes)
+        self.assertIn(b"Total: \xe2\x82\xac 25.00", content_bytes) # Euro symbol in utf-8
 
     def test_format_solution_text(self):
         """Test the text formatting logic."""

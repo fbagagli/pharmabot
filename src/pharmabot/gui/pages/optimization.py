@@ -1,6 +1,4 @@
 import logging
-import tkinter as tk
-from tkinter import filedialog
 from typing import List
 
 from nicegui import run, ui
@@ -52,38 +50,13 @@ def format_solution_text(solutions: List[Solution]) -> str:
 
 
 def save_results(solutions: List[Solution]) -> None:
-    """Opens a file dialog to save the optimization results."""
+    """Downloads the optimization results as a text file."""
     if not solutions:
         ui.notify("No results to save.", type="warning")
         return
 
     text_content = format_solution_text(solutions)
-
-    try:
-        # Create a hidden root window for the dialog
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)  # Make sure it appears on top
-
-        file_path = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")],
-            title="Save Optimization Results",
-        )
-        root.destroy()
-
-        if file_path:
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(text_content)
-            ui.notify(f"Results saved to {file_path}", type="positive")
-        else:
-            ui.notify("Save cancelled.", type="info")
-
-    except Exception as e:
-        logger.error(f"Error saving file: {e}")
-        # Fallback to browser download if local dialog fails (though native=True usually implies local)
-        ui.download(text_content.encode("utf-8"), "optimization_results.txt")
-        ui.notify("Could not open file dialog. Downloading instead.", type="warning")
+    ui.download(text_content.encode("utf-8"), "optimization_results.txt")
 
 
 def render() -> None:
