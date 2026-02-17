@@ -59,8 +59,15 @@ def save_results(solutions: List[Solution]) -> None:
     ui.download(text_content.encode("utf-8"), "optimization_results.txt")
 
 
+@ui.refreshable
 def render() -> None:
     """Render the Optimization page."""
+    if not database.is_connected():
+        ui.label("Please connect to a database in the Home tab.").classes(
+            "text-lg text-grey-500 q-pa-md"
+        )
+        return
+
     ui.label("Basket Optimization").classes("text-h4 q-mb-md")
 
     # --- Configuration Section ---

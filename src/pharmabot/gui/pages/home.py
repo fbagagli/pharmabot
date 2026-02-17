@@ -1,17 +1,37 @@
+from typing import Callable, Optional
 from nicegui import ui
-from pharmabot.database import create_db_and_tables
+from pharmabot import database
 
 
-def init_db_action() -> None:
-    """Initialize the database and notify the user."""
-    try:
-        create_db_and_tables()
-        ui.notify("Database initialized successfully", type="positive")
-    except Exception as e:
-        ui.notify(f"Error initializing database: {e}", type="negative")
-
-
-def render() -> None:
+def render(on_connect: Optional[Callable] = None) -> None:
     """Render the Home page."""
-    with ui.card():
-        ui.button("Initialize Database", on_click=init_db_action).classes("w-full")
+    with ui.card().classes("w-full"):
+        ui.label("Database Connection").classes("text-h6")
+
+        # Default path
+        db_path_input = ui.input("Database Path", value="pharmabot.db").classes(
+            "w-full"
+        )
+
+        def connect():
+            path = db_path_input.value
+            if not path:
+                ui.notify("Please enter a database path", type="negative")
+                return
+
+            try:
+                # Initialize/Connect
+                database.init_db(path)
+                ui.notify(f"Connected to database: {path}", type="positive")
+
+                # Refresh UI
+                if on_connect:
+                    on_connect()
+
+            except Exception as e:
+                ui.notify(f"Error connecting to database: {e}", type="negative")
+
+        with ui.row().classes("w-full gap-4"):
+            ui.button("Connect / Create", on_click=connect).props("icon=check").classes(
+                "w-full"
+            )
