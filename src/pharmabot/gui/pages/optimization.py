@@ -68,6 +68,9 @@ def render() -> None:
         )
         return
 
+    # State to hold the latest solutions
+    current_solutions: List[Solution] = []
+
     ui.label("Basket Optimization").classes("text-h4 q-mb-md")
 
     # --- Configuration Section ---
@@ -85,13 +88,20 @@ def render() -> None:
              ui.tooltip("Comma-separated limits for each order count (e.g., '5,2' means top 5 for 1-order, top 2 for 2-orders).")
 
         optimize_btn = ui.button("Optimize", icon="rocket")
-        save_btn = ui.button("Save Results", icon="save", color="secondary").props("disabled")
+        save_btn = ui.button(
+            "Save Results",
+            icon="save",
+            color="secondary",
+            on_click=lambda: save_results(current_solutions),
+        ).props("disabled")
 
     # --- Results Section ---
     results_container = ui.column().classes("w-full q-mt-md")
 
     async def run_optimization():
+        nonlocal current_solutions
         results_container.clear()
+        save_btn.disable()
 
         # Read inputs
         try:
@@ -124,12 +134,13 @@ def render() -> None:
         if not solutions:
             with results_container:
                 ui.label("No solutions found matching the criteria.").classes("text-italic text-grey")
+            current_solutions = []
             save_btn.disable()
             return
 
-        # Enable save button and attach handler
+        # Update state and enable save button
+        current_solutions = solutions
         save_btn.enable()
-        save_btn.on("click", lambda: save_results(solutions), replace=True)
 
         # Pre-fetch product names for display (optimization: do this once)
         # We need a session for this, or use a cached map.
