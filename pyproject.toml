@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 pharmabot = "pharmabot.main:app"
+pharmabot-gui = "pharmabot.gui.app:run_gui"
 
 [build-system]
 requires = ["hatchling"]
