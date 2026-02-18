@@ -4,12 +4,21 @@ from pharmabot.database import create_db_and_tables
 from pharmabot import catalog
 from pharmabot import basket
 from pharmabot import scraper
+from pharmabot import gui
 
 app = typer.Typer()
 
 app.add_typer(catalog.app, name="catalog", help="Manage product catalog.")
 app.add_typer(basket.app, name="basket", help="Manage basket items.")
 app.add_typer(scraper.app, name="scraper", help="Scrape data from external sources.")
+
+
+@app.command(name="gui")
+def start_gui():
+    """
+    Start the Pharmabot GUI.
+    """
+    gui.run_gui()
 
 
 @app.command()
