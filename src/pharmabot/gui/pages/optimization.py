@@ -93,7 +93,8 @@ def render() -> None:
             icon="save",
             color="secondary",
             on_click=lambda: save_results(current_solutions),
-        ).props("disabled")
+        )
+        save_btn.disable()
 
     # --- Results Section ---
     results_container = ui.column().classes("w-full q-mt-md")
