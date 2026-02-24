@@ -55,8 +55,13 @@ def save_results(solutions: List[Solution]) -> None:
         ui.notify("No results to save.", type="warning")
         return
 
-    text_content = format_solution_text(solutions)
-    ui.download(text_content.encode("utf-8"), "optimization_results.txt")
+    try:
+        text_content = format_solution_text(solutions)
+        ui.download(text_content.encode("utf-8"), "optimization_results.txt")
+        ui.notify("Download started", type="positive")
+    except Exception as e:
+        logger.exception("Error saving results")
+        ui.notify(f"Error saving results: {e}", type="negative")
 
 
 @ui.refreshable
@@ -68,8 +73,8 @@ def render() -> None:
         )
         return
 
-    # State to hold the latest solutions
-    current_solutions: List[Solution] = []
+    # State to hold the latest solutions (using a dict for robust closure capture)
+    state = {"solutions": []}
 
     ui.label("Basket Optimization").classes("text-h4 q-mb-md")
 
@@ -92,7 +97,7 @@ def render() -> None:
             "Save Results",
             icon="save",
             color="secondary",
-            on_click=lambda: save_results(current_solutions),
+            on_click=lambda: save_results(state["solutions"]),
         )
         save_btn.disable()
 
@@ -100,7 +105,6 @@ def render() -> None:
     results_container = ui.column().classes("w-full q-mt-md")
 
     async def run_optimization():
-        nonlocal current_solutions
         results_container.clear()
         save_btn.disable()
 
@@ -135,12 +139,12 @@ def render() -> None:
         if not solutions:
             with results_container:
                 ui.label("No solutions found matching the criteria.").classes("text-italic text-grey")
-            current_solutions = []
+            state["solutions"] = []
             save_btn.disable()
             return
 
         # Update state and enable save button
-        current_solutions = solutions
+        state["solutions"] = solutions
         save_btn.enable()
 
         # Pre-fetch product names for display (optimization: do this once)
