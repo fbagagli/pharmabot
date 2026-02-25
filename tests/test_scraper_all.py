@@ -40,7 +40,7 @@ def test_scrape_basket_logic(session: Session):
         scrape_basket(session)
 
         # 4. Verify interactions
-        mock_scrape.assert_called_once_with(query="987654321", headless=True)
+        mock_scrape.assert_called_once_with(query="987654321", headless=True, wait_for_input=True)
 
     # 5. Verify DB State
     pharmacies = session.exec(select(Pharmacy)).all()
@@ -94,7 +94,7 @@ def test_scrape_basket_no_minsan(session: Session):
         scrape_basket(session)
 
         # 4. Verify interactions: Should be called with the NAME
-        mock_scrape.assert_called_once_with(query="Generic Aspirin", headless=True)
+        mock_scrape.assert_called_once_with(query="Generic Aspirin", headless=True, wait_for_input=True)
 
     # 5. Verify DB State
     pharmacy = session.exec(select(Pharmacy).where(Pharmacy.name == "Test Pharmacy A")).first()
