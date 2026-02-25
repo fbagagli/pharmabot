@@ -290,35 +290,47 @@ def scrape_product(
             return []
 
 
-def scrape_basket(
-    session: Session, headless: bool = True, wait_for_input: bool = True
-):
+def clear_database(session: Session):
     """
-    1. Clear Offer and Pharmacy tables.
-    2. Iterate over all basket items.
-    3. Scrape offers for each product.
-    4. Populate DB with Pharmacy and Offer records.
+    Clear Offer and Pharmacy tables.
     """
-    console.print(Panel("Starting Basket Scraping...", style="bold magenta"))
-
-    # 1. Clear Tables
     console.print("[yellow]Clearing existing offers and pharmacies...[/]")
     session.exec(delete(Offer))
     session.exec(delete(Pharmacy))
     session.commit()
+    console.print("[green]✔ Database cleared.[/]")
 
-    # 2. Get Basket Items
+
+def scrape_basket(
+    session: Session, headless: bool = True, wait_for_input: bool = True
+):
+    """
+    1. Iterate over all basket items.
+    2. Scrape offers for each product if not already present in DB.
+    3. Populate DB with Pharmacy and Offer records.
+    """
+    console.print(Panel("Starting Basket Scraping...", style="bold magenta"))
+
+    # 1. Get Basket Items
     basket_items = session.exec(select(BasketItem)).all()
     if not basket_items:
         console.print("[red]Basket is empty. Nothing to scrape.[/]")
         return
 
-    # 3. Iterate and Scrape
+    # 2. Iterate and Scrape
     for item in basket_items:
         # Need to fetch the product to get the minsan
         product = session.get(ProductCatalog, item.product_id)
         if not product:
             console.print(f"[red]Product for basket item {item.id} not found.[/]")
+            continue
+
+        # Check if already scraped
+        existing_offer = session.exec(
+            select(Offer).where(Offer.product_id == product.id)
+        ).first()
+        if existing_offer:
+            console.print(f"[yellow]Skipping {product.name} (already has offers in DB).[/]")
             continue
 
         search_query = product.minsan if product.minsan else product.name

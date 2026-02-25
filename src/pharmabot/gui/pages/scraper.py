@@ -128,6 +128,31 @@ def render():
 
                 ui.button("Scrape Basket", on_click=run_scrape_basket).props("icon=shopping_cart")
 
+                async def run_clean_db():
+                    log.clear()
+                    results_container.clear()
+                    ui.notify("Clearing database...", type="info")
+
+                    log_writer = NiceGUILogWriter(log)
+                    temp_console = Console(file=log_writer, force_terminal=False)
+                    original_console = scraper_service.console
+                    scraper_service.console = temp_console
+
+                    try:
+                        def _clean_task():
+                            with database.get_session() as session:
+                                scraper_service.clear_database(session)
+
+                        await run.io_bound(_clean_task)
+                        ui.notify("Database cleared!", type="positive")
+                    except Exception as e:
+                        ui.notify(f"Error: {str(e)}", type="negative")
+                        log.push(f"Error: {str(e)}")
+                    finally:
+                        scraper_service.console = original_console
+
+                ui.button("Cleanup", on_click=run_clean_db).props("icon=delete_sweep color=red")
+
             # Logs
             ui.label("Logs").classes("text-lg font-bold mt-4")
             log = ui.log().classes("w-full h-64 border rounded bg-gray-100 p-2 font-mono text-xs").style("white-space: pre-wrap;")

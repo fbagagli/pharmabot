@@ -55,6 +55,15 @@ def scrape_all(headless: bool = True):
         scraper_service.scrape_basket(session, headless)
 
 
+@app.command(name="clean")
+def scrape_clean():
+    """
+    Clear all scraped offers and pharmacies from the database.
+    """
+    with database.get_session() as session:
+        scraper_service.clear_database(session)
+
+
 @app.command(name="list-offers")
 def list_offers(
     product_id: Annotated[
