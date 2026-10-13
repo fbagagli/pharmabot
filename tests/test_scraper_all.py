@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import patch, ANY
 from decimal import Decimal
 from sqlmodel import Session, select
 from pharmabot.models import ProductCatalog, BasketItem, Pharmacy, Offer
@@ -40,7 +40,9 @@ def test_scrape_basket_logic(session: Session):
         scrape_basket(session)
 
         # 4. Verify interactions
-        mock_scrape.assert_called_once_with(query="987654321", headless=True, wait_for_input=True)
+        mock_scrape.assert_called_once_with(
+            query="987654321", headless=True, wait_for_input=True, sb=ANY
+        )
 
     # 5. Verify DB State
     pharmacies = session.exec(select(Pharmacy)).all()
@@ -94,10 +96,14 @@ def test_scrape_basket_no_minsan(session: Session):
         scrape_basket(session)
 
         # 4. Verify interactions: Should be called with the NAME
-        mock_scrape.assert_called_once_with(query="Generic Aspirin", headless=True, wait_for_input=True)
+        mock_scrape.assert_called_once_with(
+            query="Generic Aspirin", headless=True, wait_for_input=True, sb=ANY
+        )
 
     # 5. Verify DB State
-    pharmacy = session.exec(select(Pharmacy).where(Pharmacy.name == "Test Pharmacy A")).first()
+    pharmacy = session.exec(
+        select(Pharmacy).where(Pharmacy.name == "Test Pharmacy A")
+    ).first()
     assert pharmacy is not None
     assert pharmacy.base_shipping_cost == Decimal("2.00")
 

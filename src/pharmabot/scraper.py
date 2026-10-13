@@ -64,6 +64,14 @@ def scrape_clean():
         scraper_service.clear_database(session)
 
 
+@app.command(name="reset-session")
+def reset_session():
+    """
+    Reset persistent browser session profile and clear stored cookies.
+    """
+    scraper_service.reset_browser_profile()
+
+
 @app.command(name="list-offers")
 def list_offers(
     product_id: Annotated[

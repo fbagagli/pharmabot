@@ -1,19 +1,36 @@
+import os
+import random
 import re
-from typing import Optional, Sequence
+import time
+from typing import Any, Optional, Sequence
 from rich.console import Console
 from rich.panel import Panel
 from sqlalchemy.orm import joinedload
 from sqlmodel import Session, select, delete
 from pharmabot.models import BasketItem, Pharmacy, Offer, ProductCatalog
-from pharmabot.exceptions import PharmaBotMissingCookieBanner
-from tenacity import (
-    retry,
-    stop_after_attempt,
-    wait_exponential,
-    retry_if_exception_type,
-)
 
 console = Console()
+
+BROWSER_PROFILE_DIR = os.environ.get(
+    "PHARMABOT_PROFILE_DIR",
+    os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", ".browser_profile")
+    ),
+)
+
+
+def get_browser_session(headless: bool = True):
+    """Create and return a configured SeleniumBase session context manager with persistent profile."""
+    from seleniumbase import SB
+
+    os.makedirs(BROWSER_PROFILE_DIR, exist_ok=True)
+    return SB(
+        uc=True,
+        test=False,
+        headless=headless,
+        locale_code="it",
+        user_data_dir=BROWSER_PROFILE_DIR,
+    )
 
 
 def clean_price(text: str) -> float:
@@ -27,42 +44,177 @@ def clean_price(text: str) -> float:
     return 0.0
 
 
-def step_1_open_site(sb):
+def reset_browser_profile() -> None:
+    """Remove the persistent browser profile directory to clear any poisoned cookies or state."""
+    import shutil
+
+    if os.path.exists(BROWSER_PROFILE_DIR):
+        try:
+            shutil.rmtree(BROWSER_PROFILE_DIR, ignore_errors=True)
+            console.print("[green]✔ Browser session profile reset successfully.[/]")
+        except Exception as e:
+            console.print(f"[red]Error resetting browser profile: {e}[/]")
+    else:
+        console.print(
+            "[yellow]Browser profile directory does not exist (already clean).[/]"
+        )
+
+
+def is_datadome_present(sb) -> bool:
+    """Check if the current page contains a DataDome challenge or CAPTCHA."""
+    try:
+        if sb.is_element_present('iframe[title*="DataDome"]') or sb.is_element_present(
+            'iframe[src*="captcha-delivery.com"]'
+        ):
+            return True
+        source = sb.get_page_source().lower()
+        if "captcha-delivery.com" in source or (
+            "datadome" in source and "var dd=" in source
+        ):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def is_datadome_blocked(sb) -> bool:
+    """Check if the current page is the permanent 403 block page."""
+    try:
+        source = sb.get_page_source().lower()
+        if any(
+            phrase in source
+            for phrase in [
+                "ci ha insospettiti",
+                "velocità sovrumana",
+                "accesso temporaneamente limitato",
+                "accesso temporaneamente disabilitato",
+                "un robot è sulla tua stessa rete",
+            ]
+        ):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def step_1_open_site(sb, wait_for_input: bool = True):
     console.print(Panel("Step 1: Connecting...", style="cyan"))
     url = "https://www.trovaprezzi.it/"
+    try:
+        current_url = sb.get_current_url()
+        if (
+            "trovaprezzi" in current_url
+            and not is_datadome_present(sb)
+            and not is_datadome_blocked(sb)
+        ):
+            console.print("[green]✔ Already on Trovaprezzi, reusing page[/]")
+            return
+    except Exception:
+        pass
+
     sb.activate_cdp_mode(url)
-    if "trovaprezzi" in sb.get_current_url():
+    sb.sleep(random.uniform(1.5, 2.5))
+
+    # 1. Check for poisoned 403 block page
+    if is_datadome_blocked(sb):
+        console.print(
+            "[bold red]⚠ Detected DataDome 403 block page! Session was poisoned.[/]"
+        )
+        reset_browser_profile()
+        raise Exception(
+            "Access blocked by DataDome (session poisoned). "
+            "Profile was automatically cleared. Please retry."
+        )
+
+    # 2. Check for DataDome CAPTCHA puzzle
+    if is_datadome_present(sb):
+        console.print("[bold yellow]⚠ DataDome CAPTCHA challenge detected![/]")
+        console.print(
+            "[bold cyan]Please solve the puzzle in the Chrome window. "
+            "Waiting for resolution (up to 90s)...[/]"
+        )
+
+        solved = False
+        start_time = time.time()
+        while time.time() - start_time < 90:
+            sb.sleep(2)
+            if is_datadome_blocked(sb):
+                console.print("[bold red]⚠ Challenge failed; session was blocked.[/]")
+                reset_browser_profile()
+                raise Exception("DataDome challenge failed. Profile cleared.")
+            if not is_datadome_present(sb):
+                console.print(
+                    "[bold green]✔ DataDome challenge resolved! Real page loaded.[/]"
+                )
+                solved = True
+                break
+
+        if not solved:
+            if wait_for_input:
+                console.print(
+                    "[yellow]Press Enter after solving the CAPTCHA in the browser window...[/]"
+                )
+                try:
+                    input("")
+                except Exception:
+                    pass
+                if not is_datadome_present(sb) and not is_datadome_blocked(sb):
+                    solved = True
+
+            if not solved:
+                raise Exception("DataDome CAPTCHA was not resolved within timeout.")
+
+    if "trovaprezzi" in sb.get_current_url() and not is_datadome_blocked(sb):
         console.print("[green]✔ Homepage Loaded[/]")
     else:
-        raise Exception("Navigation Failed")
+        raise Exception("Navigation Failed or Blocked")
 
 
-@retry(
-    stop=stop_after_attempt(2),
-    wait=wait_exponential(multiplier=1, min=2, max=5),
-    retry=retry_if_exception_type(PharmaBotMissingCookieBanner),
-    reraise=True,
-)
 def step_2_accept_cookies(sb):
     console.print(Panel("Step 2: Cookies...", style="magenta"))
     cookie_btn = ".iubenda-cs-accept-btn"
-    if sb.is_element_visible(cookie_btn):
-        sb.click(cookie_btn)
-        console.print("[green]✔ Cookies Accepted[/]")
-    else:
-        console.print("[yellow]⚠ No cookie banner (Skipping)[/]")
-        raise PharmaBotMissingCookieBanner("no cookie banner found")
+    try:
+        # Give the cookie banner up to 3 seconds to render if not already accepted
+        try:
+            sb.wait_for_element_visible(cookie_btn, timeout=3)
+            sb.sleep(random.uniform(0.4, 0.8))
+            sb.click(cookie_btn)
+            console.print("[green]✔ Cookies Accepted[/]")
+            sb.sleep(random.uniform(0.5, 1.0))
+        except Exception:
+            console.print(
+                "[yellow]✔ Cookie banner not present (already accepted or not shown)[/]"
+            )
+    except Exception as e:
+        console.print(f"[yellow]⚠ Cookie check: {e}[/]")
 
 
 def step_3_search(sb, query):
     search_input = 'input[type="search"], input[name="q"]'
-    sb.wait_for_element(search_input, timeout=5)
+    sb.wait_for_element(search_input, timeout=10)
+
+    # Human-like delay before clicking the search box
+    sb.sleep(random.uniform(0.3, 0.7))
     sb.click(search_input)
-    sb.type(search_input, query + "\n")
+    sb.sleep(random.uniform(0.2, 0.4))
+
+    # Clear input if previous search text remains
+    try:
+        sb.clear(search_input)
+        sb.sleep(random.uniform(0.2, 0.4))
+    except Exception:
+        pass
+
+    console.print(f"[grey50]Typing query at human speed: {query}...[/]")
+    sb.press_keys(search_input, query)
+
+    # Natural hesitation before pressing Enter
+    sb.sleep(random.uniform(0.5, 1.2))
+    sb.send_keys(search_input, "\n")
 
     console.print("[grey50]Waiting for results...[/]")
     try:
-        sb.wait_for_text("€", timeout=5)
+        sb.wait_for_text("€", timeout=7)
         console.print("[green]✔ Results loaded[/]")
     except Exception:
         console.print("[yellow] Results missing, go to check for other actions[/]")
@@ -251,40 +403,54 @@ def step_4_extract_results(sb):
     return results
 
 
+def _execute_scrape_steps(sb, query: str, wait_for_input: bool = True):
+    step_1_open_site(sb, wait_for_input=wait_for_input)
+    sb.sleep(random.uniform(1.0, 1.8))
+    step_2_accept_cookies(sb)
+    console.print(Panel(f"Step 3: Searching {query}...", style="yellow"))
+    step_3_search(sb, query)
+    sb.sleep(random.uniform(1.5, 2.5))
+    if step_3_is_disambiguation_page(sb):
+        if wait_for_input:
+            console.print(
+                "[yellow]Found disambiguation, select item and then press enter...[/]"
+            )
+            input("")
+        else:
+            console.print(
+                "[yellow]Found disambiguation, skipping user input (wait_for_input=False)...[/]"
+            )
+            try:
+                step_3_disambiguate(sb)
+            except Exception:
+                pass
+    else:
+        console.print("[green]load all results and go to parsing...[/]")
+    step_3_load_all_results(sb)
+    sb.sleep(random.uniform(1.0, 2.0))
+    offers = step_4_extract_results(sb)
+    return offers
+
+
 def scrape_product(
-    query: str = "012745168", headless: bool = True, wait_for_input: bool = True
+    query: str = "012745168",
+    headless: bool = True,
+    wait_for_input: bool = True,
+    sb: Optional[Any] = None,
 ):
     """Execute all steps to gather prices information for a single product."""
-    from seleniumbase import SB
-
-    with SB(uc=True, test=True, headless=headless, locale_code="it") as sb:
+    if sb is not None:
         try:
-            step_1_open_site(sb)
-            sb.sleep(2)
-            step_2_accept_cookies(sb)
-            console.print(Panel(f"Step 3: Searching {query}...", style="yellow"))
-            step_3_search(sb, query)
-            sb.sleep(2)
-            if step_3_is_disambiguation_page(sb):
-                # console.print("[yellow]Found disambiguation, try to fix...[/]")
-                # step_3_disambiguate(sb)
-                # sb.sleep(2)
-                if wait_for_input:
-                    console.print(
-                        "[yellow]Found disambiguation, select item and then press enter...[/]"
-                    )
-                    input("")
-                else:
-                    console.print(
-                        "[yellow]Found disambiguation, skipping user input (wait_for_input=False)...[/]"
-                    )
-            else:
-                console.print("[green]load all results and go to parsing...[/]")
-            step_3_load_all_results(sb)
-            sb.sleep(2)
-            offers = step_4_extract_results(sb)
-            return offers
-
+            return _execute_scrape_steps(sb, query, wait_for_input=wait_for_input)
+        except Exception as e:
+            console.print(f"[bold red]Error:[/bold red] {e}")
+            return []
+    else:
+        try:
+            with get_browser_session(headless=headless) as new_sb:
+                return _execute_scrape_steps(
+                    new_sb, query, wait_for_input=wait_for_input
+                )
         except Exception as e:
             console.print(f"[bold red]Error:[/bold red] {e}")
             return []
@@ -301,13 +467,13 @@ def clear_database(session: Session):
     console.print("[green]✔ Database cleared.[/]")
 
 
-def scrape_basket(
-    session: Session, headless: bool = True, wait_for_input: bool = True
-):
+def scrape_basket(session: Session, headless: bool = True, wait_for_input: bool = True):
     """
     1. Iterate over all basket items.
-    2. Scrape offers for each product if not already present in DB.
-    3. Populate DB with Pharmacy and Offer records.
+    2. Filter items not yet scraped.
+    3. Open a single browser session with persistent profile.
+    4. Scrape offers for each product with human delay (jitter).
+    5. Populate DB with Pharmacy and Offer records.
     """
     console.print(Panel("Starting Basket Scraping...", style="bold magenta"))
 
@@ -317,69 +483,90 @@ def scrape_basket(
         console.print("[red]Basket is empty. Nothing to scrape.[/]")
         return
 
-    # 2. Iterate and Scrape
+    # 2. Filter items needing scraping
+    items_to_scrape = []
     for item in basket_items:
-        # Need to fetch the product to get the minsan
         product = session.get(ProductCatalog, item.product_id)
         if not product:
             console.print(f"[red]Product for basket item {item.id} not found.[/]")
             continue
 
-        # Check if already scraped
         existing_offer = session.exec(
             select(Offer).where(Offer.product_id == product.id)
         ).first()
         if existing_offer:
-            console.print(f"[yellow]Skipping {product.name} (already has offers in DB).[/]")
-            continue
-
-        search_query = product.minsan if product.minsan else product.name
-
-        console.print(
-            f"\n[bold cyan]Scraping product: {product.name} (Query: {search_query})[/]"
-        )
-
-        # Scrape
-        offers_data = scrape_product(
-            query=search_query, headless=headless, wait_for_input=wait_for_input
-        )
-
-        if not offers_data:
-            console.print(f"[yellow]No offers found for {product.name}[/]")
-            continue
-
-        console.print(
-            f"[green]Found {len(offers_data)} offers for {product.name}. Saving to DB...[/]"
-        )
-
-        # 4. Save to DB
-        for offer_data in offers_data:
-            pharmacy_name = offer_data["pharmacy"]
-
-            # Check if Pharmacy exists
-            # We check by name
-            pharmacy = session.exec(
-                select(Pharmacy).where(Pharmacy.name == pharmacy_name)
-            ).first()
-            if not pharmacy:
-                pharmacy = Pharmacy(
-                    name=pharmacy_name,
-                    base_shipping_cost=offer_data["shipping_price"],
-                    free_shipping_threshold=offer_data["free_shipping_over"],
-                )
-                session.add(pharmacy)
-                session.commit()
-                session.refresh(pharmacy)
-
-            # Create Offer
-            offer = Offer(
-                price=offer_data["price"],
-                pharmacy_id=pharmacy.id,
-                product_id=product.id,
+            console.print(
+                f"[yellow]Skipping {product.name} (already has offers in DB).[/]"
             )
-            session.add(offer)
+            continue
 
-        session.commit()
+        items_to_scrape.append((item, product))
+
+    if not items_to_scrape:
+        console.print("[green]All items in basket are already scraped.[/]")
+        return
+
+    console.print(
+        f"[cyan]Found {len(items_to_scrape)} item(s) to scrape. Starting browser session...[/]"
+    )
+
+    # 3. Single browser session for the entire basket
+    with get_browser_session(headless=headless) as sb:
+        for idx, (item, product) in enumerate(items_to_scrape):
+            search_query = product.minsan if product.minsan else product.name
+
+            console.print(
+                f"\n[bold cyan][{idx + 1}/{len(items_to_scrape)}] Scraping: {product.name} (Query: {search_query})[/]"
+            )
+
+            # Scrape reusing sb
+            offers_data = scrape_product(
+                query=search_query,
+                headless=headless,
+                wait_for_input=wait_for_input,
+                sb=sb,
+            )
+
+            if not offers_data:
+                console.print(f"[yellow]No offers found for {product.name}[/]")
+            else:
+                console.print(
+                    f"[green]Found {len(offers_data)} offers for {product.name}. Saving to DB...[/]"
+                )
+
+                # Save to DB
+                for offer_data in offers_data:
+                    pharmacy_name = offer_data["pharmacy"]
+
+                    pharmacy = session.exec(
+                        select(Pharmacy).where(Pharmacy.name == pharmacy_name)
+                    ).first()
+                    if not pharmacy:
+                        pharmacy = Pharmacy(
+                            name=pharmacy_name,
+                            base_shipping_cost=offer_data["shipping_price"],
+                            free_shipping_threshold=offer_data["free_shipping_over"],
+                        )
+                        session.add(pharmacy)
+                        session.commit()
+                        session.refresh(pharmacy)
+
+                    offer = Offer(
+                        price=offer_data["price"],
+                        pharmacy_id=pharmacy.id,
+                        product_id=product.id,
+                    )
+                    session.add(offer)
+
+                session.commit()
+
+            # 4. Human jitter between items
+            if idx < len(items_to_scrape) - 1:
+                pause_duration = random.uniform(2.5, 4.5)
+                console.print(
+                    f"[grey50]Pausing for {pause_duration:.1f}s before next product...[/]"
+                )
+                time.sleep(pause_duration)
 
     console.print(Panel("Basket Scraping Complete!", style="bold green"))
 

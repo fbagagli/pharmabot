@@ -2,7 +2,6 @@ from nicegui import ui, run
 from pharmabot.services import scraper as scraper_service
 from pharmabot import database
 from rich.console import Console
-import asyncio
 
 
 class NiceGUILogWriter:
@@ -62,7 +61,7 @@ def render():
                             scraper_service.scrape_product,
                             query=query,
                             headless=headless_checkbox.value,
-                            wait_for_input=False
+                            wait_for_input=False,
                         )
 
                         if offers:
@@ -70,13 +69,31 @@ def render():
                             # Display results immediately
                             with results_container:
                                 results_container.clear()
-                                ui.label(f"Results for '{query}':").classes("text-lg font-bold mt-4")
-                                table = ui.table(
+                                ui.label(f"Results for '{query}':").classes(
+                                    "text-lg font-bold mt-4"
+                                )
+                                ui.table(
                                     columns=[
-                                        {'name': 'pharmacy', 'label': 'Pharmacy', 'field': 'pharmacy'},
-                                        {'name': 'price', 'label': 'Price', 'field': 'price'},
-                                        {'name': 'shipping', 'label': 'Shipping', 'field': 'shipping_price'},
-                                        {'name': 'free_over', 'label': 'Free Shipping Over', 'field': 'free_shipping_over'},
+                                        {
+                                            "name": "pharmacy",
+                                            "label": "Pharmacy",
+                                            "field": "pharmacy",
+                                        },
+                                        {
+                                            "name": "price",
+                                            "label": "Price",
+                                            "field": "price",
+                                        },
+                                        {
+                                            "name": "shipping",
+                                            "label": "Shipping",
+                                            "field": "shipping_price",
+                                        },
+                                        {
+                                            "name": "free_over",
+                                            "label": "Free Shipping Over",
+                                            "field": "free_shipping_over",
+                                        },
                                     ],
                                     rows=offers,
                                 ).classes("w-full")
@@ -112,9 +129,7 @@ def render():
                         def _scrape_task(headless_val):
                             with database.get_session() as session:
                                 scraper_service.scrape_basket(
-                                    session,
-                                    headless=headless_val,
-                                    wait_for_input=False
+                                    session, headless=headless_val, wait_for_input=False
                                 )
 
                         await run.io_bound(_scrape_task, headless_checkbox.value)
@@ -126,7 +141,9 @@ def render():
                     finally:
                         scraper_service.console = original_console
 
-                ui.button("Scrape Basket", on_click=run_scrape_basket).props("icon=shopping_cart")
+                ui.button("Scrape Basket", on_click=run_scrape_basket).props(
+                    "icon=shopping_cart"
+                )
 
                 async def run_clean_db():
                     log.clear()
@@ -139,6 +156,7 @@ def render():
                     scraper_service.console = temp_console
 
                     try:
+
                         def _clean_task():
                             with database.get_session() as session:
                                 scraper_service.clear_database(session)
@@ -151,11 +169,36 @@ def render():
                     finally:
                         scraper_service.console = original_console
 
-                ui.button("Cleanup", on_click=run_clean_db).props("icon=delete_sweep color=red")
+                ui.button("Cleanup", on_click=run_clean_db).props(
+                    "icon=delete_sweep color=red"
+                )
+
+                async def run_reset_session():
+                    log.clear()
+                    ui.notify("Resetting browser session profile...", type="info")
+                    try:
+                        await run.io_bound(scraper_service.reset_browser_profile)
+                        ui.notify(
+                            "Browser session reset successfully!", type="positive"
+                        )
+                        log.push(
+                            "Browser profile reset: poisoned session cookies cleared."
+                        )
+                    except Exception as e:
+                        ui.notify(f"Error resetting session: {str(e)}", type="negative")
+                        log.push(f"Error: {str(e)}")
+
+                ui.button("Reset Session", on_click=run_reset_session).props(
+                    "icon=restart_alt color=orange"
+                )
 
             # Logs
             ui.label("Logs").classes("text-lg font-bold mt-4")
-            log = ui.log().classes("w-full h-64 border rounded bg-gray-100 p-2 font-mono text-xs").style("white-space: pre-wrap;")
+            log = (
+                ui.log()
+                .classes("w-full h-64 border rounded bg-gray-100 p-2 font-mono text-xs")
+                .style("white-space: pre-wrap;")
+            )
 
             # Results container for immediate search results
             results_container = ui.column().classes("w-full")
@@ -163,8 +206,12 @@ def render():
             # Navigation to Log Views
             ui.separator().classes("my-4")
             with ui.row().classes("gap-4"):
-                ui.button("View Offers Log", on_click=show_offers_view).props("outline icon=list")
-                ui.button("View Pharmacies Log", on_click=show_pharmacies_view).props("outline icon=local_pharmacy")
+                ui.button("View Offers Log", on_click=show_offers_view).props(
+                    "outline icon=list"
+                )
+                ui.button("View Pharmacies Log", on_click=show_pharmacies_view).props(
+                    "outline icon=local_pharmacy"
+                )
 
     def show_offers_view():
         content.clear()
@@ -178,22 +225,44 @@ def render():
 
                 rows = []
                 for offer in offers:
-                    rows.append({
-                        'product': offer.product.name,
-                        'pharmacy': offer.pharmacy.name,
-                        'price': f"{offer.price:.2f} €",
-                        'shipping': f"{offer.pharmacy.base_shipping_cost:.2f} €"
-                    })
+                    rows.append(
+                        {
+                            "product": offer.product.name,
+                            "pharmacy": offer.pharmacy.name,
+                            "price": f"{offer.price:.2f} €",
+                            "shipping": f"{offer.pharmacy.base_shipping_cost:.2f} €",
+                        }
+                    )
 
                 ui.table(
                     columns=[
-                        {'name': 'product', 'label': 'Product', 'field': 'product', 'sortable': True},
-                        {'name': 'pharmacy', 'label': 'Pharmacy', 'field': 'pharmacy', 'sortable': True},
-                        {'name': 'price', 'label': 'Price', 'field': 'price', 'sortable': True},
-                        {'name': 'shipping', 'label': 'Shipping', 'field': 'shipping', 'sortable': True},
+                        {
+                            "name": "product",
+                            "label": "Product",
+                            "field": "product",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "pharmacy",
+                            "label": "Pharmacy",
+                            "field": "pharmacy",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "price",
+                            "label": "Price",
+                            "field": "price",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "shipping",
+                            "label": "Shipping",
+                            "field": "shipping",
+                            "sortable": True,
+                        },
                     ],
                     rows=rows,
-                    pagination=10
+                    pagination=10,
                 ).classes("w-full")
 
     def show_pharmacies_view():
@@ -208,23 +277,44 @@ def render():
 
                 rows = []
                 for p in pharmacies:
-                    free_ship = f"{p.free_shipping_threshold:.2f} €" if p.free_shipping_threshold is not None else "N/A"
-                    rows.append({
-                        'id': p.id,
-                        'name': p.name,
-                        'base_shipping': f"{p.base_shipping_cost:.2f} €",
-                        'free_shipping': free_ship
-                    })
+                    free_ship = (
+                        f"{p.free_shipping_threshold:.2f} €"
+                        if p.free_shipping_threshold is not None
+                        else "N/A"
+                    )
+                    rows.append(
+                        {
+                            "id": p.id,
+                            "name": p.name,
+                            "base_shipping": f"{p.base_shipping_cost:.2f} €",
+                            "free_shipping": free_ship,
+                        }
+                    )
 
                 ui.table(
                     columns=[
-                        {'name': 'id', 'label': 'ID', 'field': 'id', 'sortable': True},
-                        {'name': 'name', 'label': 'Name', 'field': 'name', 'sortable': True},
-                        {'name': 'base_shipping', 'label': 'Base Shipping', 'field': 'base_shipping', 'sortable': True},
-                        {'name': 'free_shipping', 'label': 'Free Shipping Threshold', 'field': 'free_shipping', 'sortable': True},
+                        {"name": "id", "label": "ID", "field": "id", "sortable": True},
+                        {
+                            "name": "name",
+                            "label": "Name",
+                            "field": "name",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "base_shipping",
+                            "label": "Base Shipping",
+                            "field": "base_shipping",
+                            "sortable": True,
+                        },
+                        {
+                            "name": "free_shipping",
+                            "label": "Free Shipping Threshold",
+                            "field": "free_shipping",
+                            "sortable": True,
+                        },
                     ],
                     rows=rows,
-                    pagination=10
+                    pagination=10,
                 ).classes("w-full")
 
     # Initialize Main View

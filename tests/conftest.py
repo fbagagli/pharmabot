@@ -28,3 +28,13 @@ def override_get_session(session):
 
         mock_get_session.side_effect = mock_gen
         yield
+
+
+@pytest.fixture(autouse=True)
+def mock_browser_session():
+    with patch("pharmabot.services.scraper.get_browser_session") as mock_get_sb:
+        from unittest.mock import MagicMock
+
+        mock_sb = MagicMock()
+        mock_get_sb.return_value.__enter__.return_value = mock_sb
+        yield mock_sb
