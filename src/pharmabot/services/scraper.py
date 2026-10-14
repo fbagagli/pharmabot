@@ -97,25 +97,12 @@ def is_datadome_blocked(sb) -> bool:
     return False
 
 
-def step_1_open_site(sb, wait_for_input: bool = True):
-    console.print(Panel("Step 1: Connecting...", style="cyan"))
-    url = "https://www.trovaprezzi.it/"
-    try:
-        current_url = sb.get_current_url()
-        if (
-            "trovaprezzi" in current_url
-            and not is_datadome_present(sb)
-            and not is_datadome_blocked(sb)
-        ):
-            console.print("[green]✔ Already on Trovaprezzi, reusing page[/]")
-            return
-    except Exception:
-        pass
+def check_and_handle_datadome(sb, wait_for_input: bool = True):
+    """Checks if a DataDome 403 block or CAPTCHA puzzle is present.
 
-    sb.activate_cdp_mode(url)
-    sb.sleep(random.uniform(1.5, 2.5))
-
-    # 1. Check for poisoned 403 block page
+    If blocked (403), clears the profile and raises an Exception.
+    If a puzzle is present, waits up to 90 seconds for human-in-the-loop resolution.
+    """
     if is_datadome_blocked(sb):
         console.print(
             "[bold red]⚠ Detected DataDome 403 block page! Session was poisoned.[/]"
@@ -126,7 +113,6 @@ def step_1_open_site(sb, wait_for_input: bool = True):
             "Profile was automatically cleared. Please retry."
         )
 
-    # 2. Check for DataDome CAPTCHA puzzle
     if is_datadome_present(sb):
         console.print("[bold yellow]⚠ DataDome CAPTCHA challenge detected![/]")
         console.print(
@@ -164,6 +150,26 @@ def step_1_open_site(sb, wait_for_input: bool = True):
             if not solved:
                 raise Exception("DataDome CAPTCHA was not resolved within timeout.")
 
+
+def step_1_open_site(sb, wait_for_input: bool = True):
+    console.print(Panel("Step 1: Connecting...", style="cyan"))
+    url = "https://www.trovaprezzi.it/"
+    try:
+        current_url = sb.get_current_url()
+        if (
+            "trovaprezzi" in current_url
+            and not is_datadome_present(sb)
+            and not is_datadome_blocked(sb)
+        ):
+            console.print("[green]✔ Already on Trovaprezzi, reusing page[/]")
+            return
+    except Exception:
+        pass
+
+    sb.activate_cdp_mode(url)
+    sb.sleep(random.uniform(1.5, 2.5))
+    check_and_handle_datadome(sb, wait_for_input=wait_for_input)
+
     if "trovaprezzi" in sb.get_current_url() and not is_datadome_blocked(sb):
         console.print("[green]✔ Homepage Loaded[/]")
     else:
@@ -189,7 +195,7 @@ def step_2_accept_cookies(sb):
         console.print(f"[yellow]⚠ Cookie check: {e}[/]")
 
 
-def step_3_search(sb, query):
+def step_3_search(sb, query: str, wait_for_input: bool = True):
     search_input = 'input[type="search"], input[name="q"]'
     sb.wait_for_element(search_input, timeout=10)
 
@@ -201,7 +207,13 @@ def step_3_search(sb, query):
     # Clear input if previous search text remains
     try:
         sb.clear(search_input)
-        sb.sleep(random.uniform(0.2, 0.4))
+    except Exception:
+        pass
+    try:
+        from selenium.webdriver.common.keys import Keys
+
+        sb.send_keys(search_input, Keys.CONTROL + "a")
+        sb.send_keys(search_input, Keys.BACKSPACE)
     except Exception:
         pass
 
@@ -212,40 +224,62 @@ def step_3_search(sb, query):
     sb.sleep(random.uniform(0.5, 1.2))
     sb.send_keys(search_input, "\n")
 
-    console.print("[grey50]Waiting for results...[/]")
-    try:
-        sb.wait_for_text("€", timeout=7)
-        console.print("[green]✔ Results loaded[/]")
-    except Exception:
+    console.print("[grey50]Waiting for results or disambiguation...[/]")
+    loaded = False
+    start_time = time.time()
+    while time.time() - start_time < 8:
+        if is_datadome_blocked(sb) or is_datadome_present(sb):
+            check_and_handle_datadome(sb, wait_for_input=wait_for_input)
+            break
+        if sb.is_text_visible("€") or sb.is_element_visible("div.listing_item"):
+            console.print("[green]✔ Results loaded directly[/]")
+            loaded = True
+            break
+        if step_3_is_disambiguation_page(sb):
+            console.print("[yellow]✔ Disambiguation page loaded[/]")
+            loaded = True
+            break
+        sb.sleep(0.5)
+
+    if not loaded and not step_3_is_disambiguation_page(sb):
         console.print("[yellow] Results missing, go to check for other actions[/]")
         sb.save_screenshot("search_fail.png")
 
 
 def step_3_is_disambiguation_page(sb):
-    """
-    Returns True if the page contains the 'disambiguation no_products' div.
+    """Returns True if the page contains disambiguation elements or categories.
 
     Args:
         sb: The SeleniumBase sb fixture/object
     """
-    return sb.is_element_visible("div.disambiguation.no_products")
+    try:
+        return (
+            sb.is_element_visible("div.disambiguation")
+            or sb.is_element_visible("a.relevant_item")
+            or sb.is_element_visible(".disambiguation_items")
+        )
+    except Exception:
+        return False
 
 
 def click_category_with_most_offers(sb):
-    """
-    Robust function using the raw driver to avoid object wrapper conflicts.
+    """Finds the category with the most offers and navigates to its URL.
+
+    Navigating via sb.open(href) avoids synthetic DOM click events (isTrusted: false)
+    monitored by DataDome.
     """
     from selenium.webdriver.common.by import By
 
-    print("Starting search for offers...")
+    console.print("[grey50]Searching for category with most offers...[/]")
 
     driver = sb.driver
     items = driver.find_elements(By.CSS_SELECTOR, "a.relevant_item")
 
-    print(f"Found {len(items)} relevant categories.")
+    console.print(f"[grey50]Found {len(items)} relevant categories.[/]")
 
     max_offers = -1
-    element_to_click = None
+    best_item = None
+    target_url = None
 
     for i, item in enumerate(items):
         try:
@@ -259,34 +293,57 @@ def click_category_with_most_offers(sb):
                 count = int(match.group(1))
                 if count > max_offers:
                     max_offers = count
-                    element_to_click = item
+                    best_item = item
+                    target_url = item.get_attribute("href")
 
         except Exception as e:
-            print(f"Skipping item {i} due to error: {e}")
+            console.print(f"[yellow]Skipping item {i} due to error: {e}[/]")
             continue
 
-    if element_to_click:
-        print(f"Clicking category with {max_offers} offers.")
-        element_to_click.click()
+    if target_url:
+        if target_url.startswith("/"):
+            target_url = f"https://www.trovaprezzi.it{target_url}"
+        console.print(
+            f"[green]Navigating via href to category with {max_offers} offers: {target_url}[/]"
+        )
+        sb.sleep(random.uniform(0.6, 1.2))
+        sb.open(target_url)
+    elif best_item:
+        console.print(
+            f"[yellow]No href found, falling back to click for {max_offers} offers.[/]"
+        )
+        best_item.click()
     else:
-        print("No offers found to click.")
+        console.print("[yellow]No offers found to click.[/]")
 
 
-def step_3_disambiguate(sb):
+def step_3_disambiguate(sb, wait_for_input: bool = True):
+    if wait_for_input:
+        console.print(
+            "[bold yellow]Found disambiguation page![/]\n"
+            "[cyan]You can manually click the desired category in the browser window.\n"
+            "Waiting up to 10 seconds before auto-selecting category with most offers...[/]"
+        )
+        start_time = time.time()
+        while time.time() - start_time < 10:
+            sb.sleep(1)
+            # If the user clicked manually, the disambiguation page will disappear
+            if not step_3_is_disambiguation_page(sb):
+                console.print("[green]✔ Category selected manually![/]")
+                return
+
+    # Auto-select the category with most offers
     click_category_with_most_offers(sb)
 
 
 def step_3_load_all_results(sb):
-    """
-    Responsibilities:
+    """Responsibilities:
     1. Scroll to the bottom to trigger lazy loading.
     2. Find the "Vedi più offerte" button.
     3. Click it repeatedly until all offers are loaded.
     """
     console.print(Panel("Step 3b: Loading all offers...", style="yellow"))
 
-    # The selector for the button you found:
-    # <a class="more_offers button ...">Vedi più offerte</a>
     load_more_btn = ".more_offers.button"
 
     # Safety limit to prevent infinite loops (e.g., if there are 5000 results)
@@ -295,9 +352,14 @@ def step_3_load_all_results(sb):
 
     while clicks < max_clicks:
         try:
-            # 1. Scroll to the bottom to make sure the button is in view
+            if is_datadome_blocked(sb):
+                console.print("[bold red]⚠ Blocked during pagination.[/]")
+                break
+
+            # 1. Scroll gently towards bottom to trigger lazy loading
+            sb.sleep(random.uniform(0.8, 1.5))
             sb.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            sb.sleep(1)  # Wait for animation
+            sb.sleep(random.uniform(1.0, 1.8))
 
             # 2. Check if button exists and is visible
             if sb.is_element_visible(load_more_btn):
@@ -307,14 +369,13 @@ def step_3_load_all_results(sb):
 
                 # Scroll directly to element to avoid "Element not interactable"
                 sb.scroll_to(load_more_btn)
+                sb.sleep(random.uniform(1.2, 2.5))
 
                 # Click it
                 sb.click(load_more_btn)
 
-                # 3. Wait for new items to appear.
-                # Trovaprezzi adds a loader class or just inserts new HTML.
-                # A simple sleep is safest here because DOM changes are complex to track.
-                sb.sleep(3)
+                # 3. Wait for new items to appear with natural pause
+                sb.sleep(random.uniform(2.5, 4.0))
 
                 clicks += 1
             else:
@@ -408,22 +469,12 @@ def _execute_scrape_steps(sb, query: str, wait_for_input: bool = True):
     sb.sleep(random.uniform(1.0, 1.8))
     step_2_accept_cookies(sb)
     console.print(Panel(f"Step 3: Searching {query}...", style="yellow"))
-    step_3_search(sb, query)
+    step_3_search(sb, query, wait_for_input=wait_for_input)
     sb.sleep(random.uniform(1.5, 2.5))
+    check_and_handle_datadome(sb, wait_for_input=wait_for_input)
     if step_3_is_disambiguation_page(sb):
-        if wait_for_input:
-            console.print(
-                "[yellow]Found disambiguation, select item and then press enter...[/]"
-            )
-            input("")
-        else:
-            console.print(
-                "[yellow]Found disambiguation, skipping user input (wait_for_input=False)...[/]"
-            )
-            try:
-                step_3_disambiguate(sb)
-            except Exception:
-                pass
+        step_3_disambiguate(sb, wait_for_input=wait_for_input)
+        check_and_handle_datadome(sb, wait_for_input=wait_for_input)
     else:
         console.print("[green]load all results and go to parsing...[/]")
     step_3_load_all_results(sb)
