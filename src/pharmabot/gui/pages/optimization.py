@@ -32,7 +32,9 @@ def format_solution_text(solutions: List[Solution]) -> str:
                 output.append(f"  Items Cost: € {order.items_cost:.2f}")
                 output.append(f"  Shipping: € {order.shipping_cost:.2f}")
                 if order.pharmacy.free_shipping_threshold:
-                    output.append(f"  (Free shipping threshold: € {order.pharmacy.free_shipping_threshold:.2f})")
+                    output.append(
+                        f"  (Free shipping threshold: € {order.pharmacy.free_shipping_threshold:.2f})"
+                    )
                 output.append("  Items:")
                 for match in order.items:
                     # We might need product name here.
@@ -42,8 +44,10 @@ def format_solution_text(solutions: List[Solution]) -> str:
                     # Actually, we can fetch product names before optimization or assume we can't show them in text file easily
                     # without re-fetching.
                     # But wait, the GUI has them. We'll improve this later if needed.
-                    output.append(f"    - ID {match.product_id}: x{match.quantity_needed} @ € {match.price:.2f}")
-            output.append("") # Empty line between options
+                    output.append(
+                        f"    - ID {match.product_id}: x{match.quantity_needed} @ € {match.price:.2f}"
+                    )
+            output.append("")  # Empty line between options
         output.append("")
 
     return "\n".join(output)
@@ -80,17 +84,21 @@ def render() -> None:
 
     # --- Configuration Section ---
     with ui.row().classes("w-full items-center gap-4 q-mb-md"):
-        max_orders_input = ui.number(
-            "Max Orders", value=1, min=1, precision=0
-        ).classes("w-32")
+        max_orders_input = ui.number("Max Orders", value=1, min=1, precision=0).classes(
+            "w-32"
+        )
 
-        limit_input = ui.input(
-            "Limit", value="3", placeholder="e.g. 3 or 5,2"
-        ).props('hint="Top N results per order count"').classes("w-48")
+        limit_input = (
+            ui.input("Limit", value="3", placeholder="e.g. 3 or 5,2")
+            .props('hint="Top N results per order count"')
+            .classes("w-48")
+        )
 
         # Tooltip for Limit
         with limit_input:
-             ui.tooltip("Comma-separated limits for each order count (e.g., '5,2' means top 5 for 1-order, top 2 for 2-orders).")
+            ui.tooltip(
+                "Comma-separated limits for each order count (e.g., '5,2' means top 5 for 1-order, top 2 for 2-orders)."
+            )
 
         optimize_btn = ui.button("Optimize", icon="rocket")
         save_btn = ui.button(
@@ -119,7 +127,9 @@ def render() -> None:
         # Define task wrapper
         def _task():
             with database.get_session() as session:
-                return basket_service.optimize_basket(session, limit=limit_str, max_orders=max_orders)
+                return basket_service.optimize_basket(
+                    session, limit=limit_str, max_orders=max_orders
+                )
 
         # Run optimization
         with results_container:
@@ -138,7 +148,9 @@ def render() -> None:
 
         if not solutions:
             with results_container:
-                ui.label("No solutions found matching the criteria.").classes("text-italic text-grey")
+                ui.label("No solutions found matching the criteria.").classes(
+                    "text-italic text-grey"
+                )
             state["solutions"] = []
             save_btn.disable()
             return
@@ -162,7 +174,9 @@ def render() -> None:
     optimize_btn.on("click", run_optimization)
 
 
-def display_results(container: ui.column, solutions: List[Solution], product_names: dict):
+def display_results(
+    container: ui.column, solutions: List[Solution], product_names: dict
+):
     """Helper to render the solutions in the container."""
 
     # Group by order count
@@ -175,8 +189,14 @@ def display_results(container: ui.column, solutions: List[Solution], product_nam
 
     with container:
         for k in sorted(grouped.keys()):
-            with ui.expansion(f"Solutions with {k} Order{'s' if k > 1 else ''}", icon="shopping_bag").classes("w-full bg-grey-200").props("default-opened"):
-
+            with (
+                ui.expansion(
+                    f"Solutions with {k} Order{'s' if k > 1 else ''}",
+                    icon="shopping_bag",
+                )
+                .classes("w-full bg-grey-200")
+                .props("default-opened")
+            ):
                 # If k=1, show a simple table
                 if k == 1:
                     render_single_order_table(grouped[k], product_names)
@@ -188,9 +208,25 @@ def display_results(container: ui.column, solutions: List[Solution], product_nam
 def render_single_order_table(solutions: List[Solution], product_names: dict):
     columns = [
         {"name": "pharmacy", "label": "Pharmacy", "field": "pharmacy", "align": "left"},
-        {"name": "items_cost", "label": "Items Cost", "field": "items_cost", "align": "right"},
-        {"name": "shipping", "label": "Shipping", "field": "shipping", "align": "right"},
-        {"name": "total", "label": "Total", "field": "total", "align": "right", "sortable": True},
+        {
+            "name": "items_cost",
+            "label": "Items Cost",
+            "field": "items_cost",
+            "align": "right",
+        },
+        {
+            "name": "shipping",
+            "label": "Shipping",
+            "field": "shipping",
+            "align": "right",
+        },
+        {
+            "name": "total",
+            "label": "Total",
+            "field": "total",
+            "align": "right",
+            "sortable": True,
+        },
         {"name": "details", "label": "Details", "field": "details", "align": "left"},
     ]
 
@@ -200,22 +236,27 @@ def render_single_order_table(solutions: List[Solution], product_names: dict):
         threshold = order.pharmacy.free_shipping_threshold
         t_str = f"Free > €{threshold:.2f}" if threshold is not None else "No free ship"
 
-        rows.append({
-            "pharmacy": order.pharmacy.name,
-            "items_cost": f"€ {order.items_cost:.2f}",
-            "shipping": f"€ {order.shipping_cost:.2f}",
-            "total": sol.total_cost, # Keep as number for sorting? Or format string.
-            "total_fmt": f"€ {sol.total_cost:.2f}", # for display
-            "details": f"Base: €{order.pharmacy.base_shipping_cost:.2f}, {t_str}"
-        })
+        rows.append(
+            {
+                "pharmacy": order.pharmacy.name,
+                "items_cost": f"€ {order.items_cost:.2f}",
+                "shipping": f"€ {order.shipping_cost:.2f}",
+                "total": sol.total_cost,  # Keep as number for sorting? Or format string.
+                "total_fmt": f"€ {sol.total_cost:.2f}",  # for display
+                "details": f"Base: €{order.pharmacy.base_shipping_cost:.2f}, {t_str}",
+            }
+        )
 
     # Custom slot for Total to show formatted value
     table = ui.table(columns=columns, rows=rows, pagination=10).classes("w-full")
-    table.add_slot("body-cell-total", r'''
+    table.add_slot(
+        "body-cell-total",
+        r"""
         <q-td key="total" :props="props">
             {{ props.row.total_fmt }}
         </q-td>
-    ''')
+    """,
+    )
 
 
 def render_multi_order_cards(solutions: List[Solution], product_names: dict):
@@ -223,7 +264,9 @@ def render_multi_order_cards(solutions: List[Solution], product_names: dict):
         with ui.card().classes("w-full q-mb-sm"):
             with ui.row().classes("w-full items-center justify-between bg-blue-50 p-2"):
                 ui.label(f"Option {idx}").classes("text-bold")
-                ui.label(f"Total: € {sol.total_cost:.2f}").classes("text-h6 text-primary")
+                ui.label(f"Total: € {sol.total_cost:.2f}").classes(
+                    "text-h6 text-primary"
+                )
 
             # Show breakdown per pharmacy
             with ui.row().classes("w-full q-pa-sm"):
@@ -233,14 +276,24 @@ def render_multi_order_cards(solutions: List[Solution], product_names: dict):
 
                         # Costs
                         ui.label(f"Items: € {order.items_cost:.2f}").classes("text-sm")
-                        ui.label(f"Shipping: € {order.shipping_cost:.2f}").classes("text-sm")
-                        ui.label(f"Subtotal: € {order.total_cost:.2f}").classes("text-bold")
+                        ui.label(f"Shipping: € {order.shipping_cost:.2f}").classes(
+                            "text-sm"
+                        )
+                        ui.label(f"Subtotal: € {order.total_cost:.2f}").classes(
+                            "text-bold"
+                        )
 
                         ui.separator().classes("my-2")
 
                         # Items list
                         with ui.scroll_area().classes("h-32 w-full"):
                             for match in order.items:
-                                p_name = product_names.get(match.product_id, f"Product {match.product_id}")
-                                ui.label(f"{p_name} (x{match.quantity_needed})").classes("text-xs")
-                                ui.label(f"€ {match.price:.2f} ea").classes("text-xs text-grey")
+                                p_name = product_names.get(
+                                    match.product_id, f"Product {match.product_id}"
+                                )
+                                ui.label(
+                                    f"{p_name} (x{match.quantity_needed})"
+                                ).classes("text-xs")
+                                ui.label(f"€ {match.price:.2f} ea").classes(
+                                    "text-xs text-grey"
+                                )

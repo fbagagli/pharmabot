@@ -96,8 +96,8 @@ def optimize_basket(
             for k in range(1, max_orders + 1):
                 limits_dict[k] = val
         except ValueError:
-             # Fallback
-             for k in range(1, max_orders + 1):
+            # Fallback
+            for k in range(1, max_orders + 1):
                 limits_dict[k] = 3
     else:
         # Apply specific values per order count

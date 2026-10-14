@@ -23,6 +23,7 @@ class PharmacyInventory(BaseModel):
     """
     Represents what a single pharmacy has in stock matching the basket.
     """
+
     pharmacy: Pharmacy
     matches: List[InventoryMatch]
     product_ids: Set[int] = set()
@@ -48,6 +49,7 @@ class Order(BaseModel):
     """
     Represents a finalized order from a specific pharmacy.
     """
+
     pharmacy: Pharmacy
     items: List[InventoryMatch]
     items_cost: Decimal
@@ -62,6 +64,7 @@ class Solution(BaseModel):
     """
     Represents a complete solution (potentially multi-order).
     """
+
     orders: List[Order]
     total_cost: Decimal
 
@@ -135,7 +138,9 @@ class PriceOptimizer:
 
         return cls(basket=basket_content, inventories=inventories)
 
-    def find_best_solutions(self, max_orders: int = 1, limits: Dict[int, int] = None) -> List[Solution]:
+    def find_best_solutions(
+        self, max_orders: int = 1, limits: Dict[int, int] = None
+    ) -> List[Solution]:
         """
         Returns the top solutions grouped by number of orders.
         """
@@ -217,7 +222,9 @@ class PriceOptimizer:
             covered_ids.update(inv.product_ids)
         return len(covered_ids) == len(self.basket.items)
 
-    def _solve_assignment(self, inventories: Tuple[PharmacyInventory, ...]) -> Optional[Solution]:
+    def _solve_assignment(
+        self, inventories: Tuple[PharmacyInventory, ...]
+    ) -> Optional[Solution]:
         """
         Find the optimal assignment of items to the given set of pharmacies.
         Returns a Solution object or None if no valid assignment found.
@@ -227,7 +234,7 @@ class PriceOptimizer:
         # state: index in items list, current_assignments {pharmacy_index: [item_matches]}
 
         best_solution = None
-        min_total_cost = Decimal('Infinity')
+        min_total_cost = Decimal("Infinity")
 
         # Map product_id to available inventories (subset)
         # item_options: List of (item_id, List[Tuple[inv_index, InventoryMatch]])
@@ -300,13 +307,15 @@ class PriceOptimizer:
 
                 order_total = items_c + shipping
 
-                orders.append(Order(
-                    pharmacy=inv.pharmacy,
-                    items=assigned_matches[:], # copy
-                    items_cost=items_c,
-                    shipping_cost=shipping,
-                    total_cost=order_total
-                ))
+                orders.append(
+                    Order(
+                        pharmacy=inv.pharmacy,
+                        items=assigned_matches[:],  # copy
+                        items_cost=items_c,
+                        shipping_cost=shipping,
+                        total_cost=order_total,
+                    )
+                )
                 total_c += order_total
 
             if total_c < min_total_cost:

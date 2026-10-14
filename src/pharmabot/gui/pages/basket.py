@@ -35,9 +35,9 @@ def open_add_dialog(table: ui.table) -> None:
             product_options, label="Product", with_input=True
         ).classes("w-full")
 
-        quantity_input = ui.number(
-            "Quantity", value=1, min=1, precision=0
-        ).classes("w-full")
+        quantity_input = ui.number("Quantity", value=1, min=1, precision=0).classes(
+            "w-full"
+        )
 
         def save():
             product_id = product_select.value

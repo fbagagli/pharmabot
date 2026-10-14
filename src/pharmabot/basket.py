@@ -101,8 +101,12 @@ def list_items():
 
 @app.command(name="optimize")
 def optimize_basket(
-    limit: Annotated[str, typer.Option(help="Limit results per order count (e.g. '3' or '5,2,1')")] = "3",
-    max_orders: Annotated[int, typer.Option(help="Maximum number of pharmacies to use")] = 1,
+    limit: Annotated[
+        str, typer.Option(help="Limit results per order count (e.g. '3' or '5,2,1')")
+    ] = "3",
+    max_orders: Annotated[
+        int, typer.Option(help="Maximum number of pharmacies to use")
+    ] = 1,
 ):
     """
     Optimize basket by finding the best combination of pharmacies to minimize total cost.
@@ -117,7 +121,9 @@ def optimize_basket(
         product_names = {item.product_id: item.product.name for item in basket_items}
 
         with console.status("Optimizing basket...", spinner="dots"):
-             winners = basket_service.optimize_basket(session, limit=limit, max_orders=max_orders)
+            winners = basket_service.optimize_basket(
+                session, limit=limit, max_orders=max_orders
+            )
 
         if not winners:
             console.print("No solutions found that cover all items.")
@@ -132,7 +138,9 @@ def optimize_basket(
             grouped[k].append(sol)
 
         for k in sorted(grouped.keys()):
-            console.print(f"\n[bold cyan]Solutions with {k} Order{'s' if k > 1 else ''}[/bold cyan]")
+            console.print(
+                f"\n[bold cyan]Solutions with {k} Order{'s' if k > 1 else ''}[/bold cyan]"
+            )
             solutions = grouped[k]
 
             if k == 1:
@@ -150,7 +158,11 @@ def optimize_basket(
                     total_cost = f"€ {sol.total_cost:.2f}"
 
                     threshold = order.pharmacy.free_shipping_threshold
-                    t_str = f"Free > €{threshold:.2f}" if threshold is not None else "No free ship"
+                    t_str = (
+                        f"Free > €{threshold:.2f}"
+                        if threshold is not None
+                        else "No free ship"
+                    )
                     base_s = f"Base: €{order.pharmacy.base_shipping_cost:.2f}"
                     details = f"{base_s}, {t_str}"
 
@@ -159,12 +171,14 @@ def optimize_basket(
                         items_cost,
                         actual_shipping,
                         total_cost,
-                        details
+                        details,
                     )
                 console.print(table)
             else:
                 for idx, sol in enumerate(solutions, 1):
-                    console.print(f"\n[bold]Option {idx} (Total: € {sol.total_cost:.2f})[/bold]")
+                    console.print(
+                        f"\n[bold]Option {idx} (Total: € {sol.total_cost:.2f})[/bold]"
+                    )
                     t = Table(show_header=True, header_style="yellow")
                     t.add_column("Pharmacy", style="green")
                     t.add_column("Items", style="white")
@@ -176,7 +190,9 @@ def optimize_basket(
                         # Build item list string
                         item_list = []
                         for m in order.items:
-                            p_name = product_names.get(m.product_id, f"ID:{m.product_id}")
+                            p_name = product_names.get(
+                                m.product_id, f"ID:{m.product_id}"
+                            )
                             item_list.append(f"{p_name} (x{m.quantity_needed})")
 
                         items_str = "\n".join(item_list)
@@ -186,6 +202,6 @@ def optimize_basket(
                             items_str,
                             f"€ {order.items_cost:.2f}",
                             f"€ {order.shipping_cost:.2f}",
-                            f"€ {order.total_cost:.2f}"
+                            f"€ {order.total_cost:.2f}",
                         )
                     console.print(t)

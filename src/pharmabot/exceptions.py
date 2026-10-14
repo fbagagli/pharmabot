@@ -21,4 +21,3 @@ class ScraperBlockedError(PharmaBotError):
     """Raised when scraping is blocked by captcha or rate-limiting."""
 
     pass
-
