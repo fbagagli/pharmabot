@@ -1,6 +1,6 @@
+import json
 import logging
 import re
-import socket
 from decimal import Decimal
 from typing import Optional
 from urllib.parse import quote_plus
@@ -12,18 +12,6 @@ from pharmabot.exceptions import ScraperBlockedError
 from pharmabot.services.scraping.base import BaseScraperProvider, ScrapedOffer
 
 logger = logging.getLogger(__name__)
-
-# Prefer IPv4 resolution in environments where IPv6 address triggers Cloudflare rate-limits
-_orig_getaddrinfo = socket.getaddrinfo
-
-
-def _ipv4_first_getaddrinfo(*args, **kwargs):
-    res = _orig_getaddrinfo(*args, **kwargs)
-    ipv4 = [r for r in res if r[0] == socket.AF_INET]
-    return ipv4 if ipv4 else res
-
-
-socket.getaddrinfo = _ipv4_first_getaddrinfo
 
 
 def clean_price(price_str: str) -> Decimal:
@@ -88,12 +76,33 @@ class PrezziFarmacoProvider(BaseScraperProvider):
                 response = None
 
         if response is None:
-            cerca_url = f"{self.base_url}/cerca?query={quote_plus(normalized_query)}"
-            try:
-                response = self._client.get(cerca_url)
-            except httpx.HTTPError as e:
-                logger.error(f"Error querying search URL {cerca_url}: {e}")
-                return []
+            # 1. First attempt to resolve product via PrezziFarmaco Elasticsearch index
+            resolved = self._search_product_by_text(normalized_query)
+            if resolved:
+                minsan, slug = resolved
+                product_url = (
+                    f"{self.base_url}/{minsan}-{slug}"
+                    if slug
+                    else f"{self.base_url}/{minsan}"
+                )
+                try:
+                    response = self._client.get(product_url)
+                except httpx.HTTPError as e:
+                    logger.warning(
+                        f"Error requesting resolved product URL {product_url}: {e}"
+                    )
+                    response = None
+
+            # 2. Fallback to /cerca?query=... if not resolved or failed
+            if response is None:
+                cerca_url = (
+                    f"{self.base_url}/cerca?query={quote_plus(normalized_query)}"
+                )
+                try:
+                    response = self._client.get(cerca_url)
+                except httpx.HTTPError as e:
+                    logger.error(f"Error querying search URL {cerca_url}: {e}")
+                    return []
 
         # Check for captcha or blocking
         if "captcha" in str(response.url) or response.status_code in (403, 429):
@@ -109,6 +118,54 @@ class PrezziFarmacoProvider(BaseScraperProvider):
             return []
 
         return self._parse_html(response.text)
+
+    def _search_product_by_text(
+        self, query: str
+    ) -> Optional[tuple[str, Optional[str]]]:
+        """Search PrezziFarmaco's searchkit Elasticsearch endpoint for matching products.
+
+        Returns a tuple of (minsan, slug) if found, else None.
+        """
+        search_url = f"{self.base_url}/ajax/searchkit/_msearch"
+        query_body = {
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": [
+                        "descrizioneseo^3",
+                        "seo_nome^3",
+                        "brand^2",
+                        "autocomplete^2",
+                        "categoria1",
+                        "categoria2",
+                    ],
+                }
+            },
+            "size": 1,
+        }
+        ndjson = (
+            f"{json.dumps({'index': 'prodotti-index'})}\n{json.dumps(query_body)}\n"
+        )
+        try:
+            resp = self._client.post(
+                search_url,
+                content=ndjson,
+                headers={"Content-Type": "application/json"},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            hits = data.get("responses", [{}])[0].get("hits", {}).get("hits", [])
+            if not hits:
+                return None
+            src = hits[0].get("_source", {})
+            minsan = src.get("codice_ministeriale")
+            slug = src.get("slug")
+            if minsan:
+                return str(minsan), str(slug) if slug else None
+        except Exception as e:
+            logger.warning(f"Error searching product by text '{query}': {e}")
+        return None
 
     def _parse_html(self, html_content: str) -> list[ScrapedOffer]:
         """Parse PrezziFarmaco product page HTML into list of ScrapedOffer."""

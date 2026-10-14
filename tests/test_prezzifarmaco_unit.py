@@ -147,7 +147,31 @@ def test_scrape_minsan_fallback_to_cerca():
         assert len(offers) == 3
 
 
-def test_scrape_name_query():
+def test_scrape_name_query_resolved():
+    provider = PrezziFarmacoProvider()
+
+    res_product = MagicMock(spec=httpx.Response)
+    res_product.status_code = 200
+    res_product.url = httpx.URL("https://www.prezzifarmaco.it/926876830-neobianacid")
+    res_product.text = SAMPLE_HTML
+
+    with (
+        patch.object(
+            provider,
+            "_search_product_by_text",
+            return_value=("926876830", "neobianacid"),
+        ),
+        patch.object(provider._client, "get", return_value=res_product) as mock_get,
+    ):
+        offers = provider.scrape("NeoBianacid")
+
+        mock_get.assert_called_once_with(
+            "https://www.prezzifarmaco.it/926876830-neobianacid"
+        )
+        assert len(offers) == 3
+
+
+def test_scrape_name_query_fallback_to_cerca():
     provider = PrezziFarmacoProvider()
 
     res_cerca = MagicMock(spec=httpx.Response)
@@ -155,13 +179,44 @@ def test_scrape_name_query():
     res_cerca.url = httpx.URL("https://www.prezzifarmaco.it/cerca?query=NeoBianacid")
     res_cerca.text = SAMPLE_HTML
 
-    with patch.object(provider._client, "get", return_value=res_cerca) as mock_get:
+    with (
+        patch.object(provider, "_search_product_by_text", return_value=None),
+        patch.object(provider._client, "get", return_value=res_cerca) as mock_get,
+    ):
         offers = provider.scrape("NeoBianacid")
 
         mock_get.assert_called_once_with(
             "https://www.prezzifarmaco.it/cerca?query=NeoBianacid"
         )
         assert len(offers) == 3
+
+
+def test_search_product_by_text_unit():
+    provider = PrezziFarmacoProvider()
+
+    mock_resp = MagicMock(spec=httpx.Response)
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "responses": [
+            {
+                "hits": {
+                    "hits": [
+                        {
+                            "_source": {
+                                "codice_ministeriale": "927170555",
+                                "slug": "hedrin-rapido-gel-100-ml",
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    with patch.object(provider._client, "post", return_value=mock_resp) as mock_post:
+        result = provider._search_product_by_text("EG Hedrin Rapido Gel")
+        assert result == ("927170555", "hedrin-rapido-gel-100-ml")
+        mock_post.assert_called_once()
 
 
 def test_scrape_empty_query():
@@ -191,10 +246,13 @@ def test_scrape_empty_results_404():
 
 def test_scrape_http_error():
     provider = PrezziFarmacoProvider()
-    with patch.object(
-        provider._client,
-        "get",
-        side_effect=httpx.RequestError("Network error"),
+    with (
+        patch.object(provider, "_search_product_by_text", return_value=None),
+        patch.object(
+            provider._client,
+            "get",
+            side_effect=httpx.RequestError("Network error"),
+        ),
     ):
         offers = provider.scrape("NeoBianacid")
         assert offers == []

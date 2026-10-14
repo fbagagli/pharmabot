@@ -22,6 +22,19 @@ def test_prezzifarmaco_e2e_single_product():
 
 
 @pytest.mark.e2e
+def test_prezzifarmaco_e2e_single_product_by_name():
+    """Live E2E test: scrape a product by name without MINSAN."""
+    offers = scrape_product("EG Hedrin Rapido Gel")
+    assert len(offers) > 0, "Expected at least one offer for EG Hedrin Rapido Gel"
+
+    for offer in offers:
+        assert isinstance(offer, dict)
+        assert "pharmacy" in offer and bool(offer["pharmacy"].strip())
+        assert offer["price"] > 0
+        assert offer["shipping_price"] >= 0
+
+
+@pytest.mark.e2e
 def test_prezzifarmaco_e2e_basket_and_incremental(session: Session):
     """Live E2E test: populate basket with two real MINSANs, scrape them, verify DB,
 
