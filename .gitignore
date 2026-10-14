@@ -3,3 +3,8 @@ __pycache__/
 .git
 
 pharmabot.db
+*.png
+*.backup
+.browser_profile/
+downloaded_files/
+.pytest_cache/
