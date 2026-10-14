@@ -32,3 +32,9 @@ dev = [
     "pytest>=9.0.1",
     "ruff>=0.14.8",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: End-to-end tests connecting to live external services",
+]
+
